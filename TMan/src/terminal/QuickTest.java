@@ -18,7 +18,7 @@ import javax.smartcardio.TerminalFactory;
 import com.licel.jcardsim.io.JavaxSmartCardInterface;
 import com.licel.jcardsim.smartcardio.JCardSimProvider;
 
-import applet.CalcApplet;
+import applet.CardApplet;
 
 /** Quick test of the Calculator applet using JCardSim's
  * JavaxSmartCardInterface which uses the Java's Smart Card I/O API,
@@ -51,8 +51,8 @@ public class QuickTest {
       JavaxSmartCardInterface simulator = new JavaxSmartCardInterface();
 
       // Install applet 
-      AID calcAppletAID = new AID(CALC_APPLET_AID,(byte)0,(byte)7);
-      simulator.installApplet(calcAppletAID, CalcApplet.class);
+      AID cardAppletAID = new AID(CALC_APPLET_AID,(byte)0,(byte)7);
+      simulator.installApplet(cardAppletAID, CardApplet.class);
 
       // Select applet
       CommandAPDU SELECT_APDU = new CommandAPDU( (byte) 0x00, (byte) 0xA4, (byte) 0x04, (byte) 0x00,                 CALC_APPLET_AID);

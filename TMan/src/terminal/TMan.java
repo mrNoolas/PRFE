@@ -36,7 +36,7 @@ import javax.swing.JTextField;
 import com.licel.jcardsim.smartcardio.CardTerminalSimulator;
 import com.licel.jcardsim.smartcardio.CardSimulator;
 
-import applet.CalcApplet;
+import applet.CardApplet;
 
 /**
  * Sample terminal for the Calculator applet.
@@ -49,7 +49,7 @@ import applet.CalcApplet;
  * @author erikpoll
  * 
  */
-public class CalcTerminal extends JPanel implements ActionListener {
+public class TMan extends JPanel implements ActionListener {
 
     //private JavaxSmartCardInterface simulatorInterface; // SIM
 
@@ -75,7 +75,7 @@ public class CalcTerminal extends JPanel implements ActionListener {
 
     CardChannel applet;
 
-    public CalcTerminal(JFrame parent) {
+    public TMan(JFrame parent) {
         //simulatorInterface = new JavaxSmartCardInterface(); // SIM
         buildGUI(parent);
         setEnabled(false);
@@ -215,7 +215,7 @@ public class CalcTerminal extends JPanel implements ActionListener {
     	    	                        setText(MSG_DISABLED);
     	    	                        break;
     	    						} catch (Exception e) {
-    	    							System.err.println("Card does not contain CalcApplet?!");
+    	    							System.err.println("Card does not contain CardApplet?!");
     	    							setText(MSG_INVALID);
     	    							sleep(2000);
     	    							setText(MSG_DISABLED);
@@ -260,8 +260,8 @@ public class CalcTerminal extends JPanel implements ActionListener {
 
           // Create simulator and install applet
           CardSimulator simulator = new CardSimulator();
-          AID calcAppletAID = new AID(CALC_APPLET_AID,(byte)0,(byte)7);
-          simulator.installApplet(calcAppletAID, CalcApplet.class);
+          AID cardAppletAID = new AID(CALC_APPLET_AID,(byte)0,(byte)7);
+          simulator.installApplet(cardAppletAID, CardApplet.class);
 
           // Insert Card into "My terminal 1"
           simulator.assignToTerminal(terminal1);
@@ -316,7 +316,7 @@ public class CalcTerminal extends JPanel implements ActionListener {
     public static void main(String[] arg) {
         JFrame frame = new JFrame(TITLE);
         Container c = frame.getContentPane();
-        CalcTerminal panel = new CalcTerminal(frame);
+        TMan panel = new TMan(frame);
         c.add(panel);
         frame.setResizable(false);
         frame.pack();
