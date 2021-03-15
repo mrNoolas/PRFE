@@ -16,29 +16,29 @@ JC_CLASSPATH=${JC_HOME}/lib/apdutool.jar:${JC_HOME}/lib/apduio.jar:${JC_HOME}/li
 
 all: applet terminal quicktest
 
-applet: CalcApplet/bin/CalcApplet.class 
+applet: CardApplet/bin/CardApplet.class 
 
-CalcApplet/bin/CalcApplet.class: CalcApplet/src/applet/CalcApplet.java
-	javac -d CalcApplet/bin -cp ${JC_CLASSPATH}:CalcTerminal/src CalcApplet/src/applet/CalcApplet.java 
+CardApplet/bin/CardApplet.class: CardApplet/src/applet/CardApplet.java
+	javac -d CardApplet/bin -cp ${JC_CLASSPATH}:TMan/src CardApplet/src/applet/CardApplet.java 
 
-quicktest: CalcTerminal/bin/terminal/QuickTest.class
+quicktest: TMan/bin/terminal/QuickTest.class
 
-CalcTerminal/bin/terminal/QuickTest.class: CalcTerminal/src/terminal/QuickTest.java
-	javac -d CalcTerminal/bin -cp ${JC_HOME}:util/jcardsim/${JCARDSIM}.jar:CalcApplet/bin CalcTerminal/src/terminal/QuickTest.java
+TMan/bin/terminal/QuickTest.class: TMan/src/terminal/QuickTest.java
+	javac -d TMan/bin -cp ${JC_HOME}:util/jcardsim/${JCARDSIM}.jar:CardApplet/bin TMan/src/terminal/QuickTest.java
 
 runquicktest: 
-	# Sends some sample APDUs to the CalcApplet
-	java -cp util/jcardsim/${JCARDSIM}.jar:CalcTerminal/bin:CalcApplet/bin terminal.QuickTest
+	# Sends some sample APDUs to the CardApplet
+	java -cp util/jcardsim/${JCARDSIM}.jar:TMan/bin:CardApplet/bin terminal.QuickTest
 
-terminal: CalcTerminal/bin/terminal/CalcTerminal.class
+terminal: TMan/bin/terminal/TMan.class
 
-CalcTerminal/bin/terminal/CalcTerminal.class: CalcTerminal/src/terminal/CalcTerminal.java
-	javac -d CalcTerminal/bin -cp ${JC_HOME}:util/jcardsim/${JCARDSIM}.jar:CalcApplet/bin:CalcTerminal/bin CalcTerminal/src/terminal/CalcTerminal.java  
+TMan/bin/terminal/TMan.class: TMan/src/terminal/TMan.java
+	javac -d TMan/bin -cp ${JC_HOME}:util/jcardsim/${JCARDSIM}.jar:CardApplet/bin:TMan/bin TMan/src/terminal/TMan.java  
 
 runterminal: 
 	# Runs the GUI terminal
-	java -cp util/jcardsim/${JCARDSIM}.jar:CalcTerminal/bin:CalcApplet/bin terminal.CalcTerminal
+	java -cp util/jcardsim/${JCARDSIM}.jar:TMan/bin:CardApplet/bin terminal.TMan
 
 clean:
-	rm -rf CalcApplet/bin/*  
-	rm -rf CalcTerminal/bin/*
+	rm -rf CardApplet/bin/*  
+	rm -rf TMan/bin/*
