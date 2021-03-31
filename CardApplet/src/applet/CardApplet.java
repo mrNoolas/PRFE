@@ -5,23 +5,43 @@ import javacard.framework.*;
 /**
  * Sample Java Card Calculator applet which operates on signed shorts. Overflow
  * is silent.
- * 
+ *
  * The instructions are the ASCII characters of the keypad keys: '0' - '9', '+',
  * '-', * 'x', ':', '=', etc. This means that the terminal should send an APDU
  * for each key pressed.
- * 
+ *
  * Response APDU consists of 5 data bytes. First byte indicates whether the M
  * register contains a non-zero value. The third and fourth bytes encode the X
  * register (the signed short value to be displayed).
- * 
+ *
  * The only non-transient field is m. This means that m is stored in EEPROM and
  * all other memory used is RAM.
- * 
+ *
  * @author Martijn Oostdijk (martijno@cs.kun.nl)
  * @author Wojciech Mostowski (woj@cs.ru.nl)
- * 
+ *
  */
 public class CardApplet extends Applet implements ISO7816 {
+
+    //keys
+
+    private static final byte[] pukTMan;    // public key TMan
+    private static final byte[] pukTChar;   // public key TChar
+    private static final byte[] pukTCons;   // public key TCons
+    private static final byte[] pukc;       // public key Card
+    private static final byte[] prkc;       // private key Card
+    private static final byte[] prrkc;      // private rekey Card
+    private static final byte[] puks;       // Server certificate verification key
+    private static final byte[] CCert;       // Server certificate verification key
+
+    private char[] skey;
+
+    private byte pintrylimit = 3;
+    private byte pinsizelimit = 6;
+    private pin = OwnerPIN(pintrylimit, pinsizelimit);
+
+    private boolean managable = true;
+
 
     private static final byte X = 0;
     private static final byte Y = 1;
