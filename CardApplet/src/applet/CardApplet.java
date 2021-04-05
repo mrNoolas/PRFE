@@ -1,10 +1,7 @@
 package applet;
 
-import javacard.framework.*;
 
-/**
- * Sample Java Card Calculator applet which operates on signed shorts. Overflow
- * is silent.
+/** * Sample Java Card Calculator applet which operates on signed shorts. Overflow * is silent.
  *
  * The instructions are the ASCII characters of the keypad keys: '0' - '9', '+',
  * '-', * 'x', ':', '=', etc. This means that the terminal should send an APDU
@@ -21,49 +18,73 @@ import javacard.framework.*;
  * @author Wojciech Mostowski (woj@cs.ru.nl)
  *
  */
+
+import javacard.framework.*;
+import javacard.security.*;
+
 public class CardApplet extends Applet implements ISO7816 {
+    private static final byte SOFTWARE_VERSION = (byte) 0;
 
-    //keys
+    // keys
+    private ECPublicKey pukTMan;    // public key TMan
+    private ECPublicKey pukTChar;   // public key TChar
+    private ECPublicKey pukTCons;   // public key TCons
+    private ECPublicKey pukc;       // public key Card
+    private ECPrivateKey prkc;       // private key Card
+    private ECPrivateKey prrkc;      // private rekey Card
+    private ECPublicKey puks;       // Server certificate verification key
+    private byte[] CCert;      // Server certificate verification key
 
-    private static final byte[] pukTMan;    // public key TMan
-    private static final byte[] pukTChar;   // public key TChar
-    private static final byte[] pukTCons;   // public key TCons
-    private static final byte[] pukc;       // public key Card
-    private static final byte[] prkc;       // private key Card
-    private static final byte[] prrkc;      // private rekey Card
-    private static final byte[] puks;       // Server certificate verification key
-    private static final byte[] CCert;       // Server certificate verification key
+    private AESKey skey;
+ 
+    // Pin
+    private static final byte pintrylimit = (byte) 3;
+    private static final byte pinsizelimit = (byte) 6;
+    private OwnerPIN pin = OwnerPIN(pintrylimit, pinsizelimit);
 
-    private char[] skey;
-
-    private byte pintrylimit = 3;
-    private byte pinsizelimit = 6;
-    private pin = OwnerPIN(pintrylimit, pinsizelimit);
-
+    // Determines whether the card is in peronalisation phase
     private boolean managable = true;
+    private byte[] ID;
+    private short petrolCredits = (short) 0;
 
+    private Object[] transactionLog;
+    private byte[] lastKnownTime;
 
-    private static final byte X = 0;
-    private static final byte Y = 1;
+    // Keeps track of authentication and card state
+    // 0x00 unitialised
+    // 0x01 terminal authenticated as TMan
+    // 0x02 terminal authenticated as TChar
+    // 0x03 terminal authenticated as TCons
+    // 0x11 terminal authenticated as TMan and card authenticated
+    // 0x12 terminal authenticated as TChar and card authenticated
+    // 0x13 terminal authenticated as TCons and card authenticated
+    // User authentication is handled by the PIN class
+    private byte[] status; 
 
-    private short[] xy;
-
-    private short m;
-
-    private byte[] lastOp;
-
-    private boolean[] lastKeyWasDigit;
 
     public CardApplet() {
-        xy = JCSystem.makeTransientShortArray((short) 2,
-                JCSystem.CLEAR_ON_RESET);
-        lastOp = JCSystem.makeTransientByteArray((short) 1,
-                JCSystem.CLEAR_ON_RESET);
-        lastKeyWasDigit = JCSystem.makeTransientBooleanArray((short) 1,
-                JCSystem.CLEAR_ON_RESET);
-        m = 0;
+        skey = KeyBuilder.buildKey(TYPE_AES_TRANSIENT_DESELECT, LENGTH_AES_128, true);
+        status = JCSystem.makeTransientByteArray((short) 1, JCSystem.CLEAR_ON_RESET);  
+        status[0] = 0x00; // unitialised
+
+        pukTMan  = KeyBuilder.buildKey(TYPE_EC_F2M_PUBLIC, LENGTH_F2M_193, true); // public key TMan
+        pukTChar = KeyBuilder.buildKey(TYPE_EC_F2M_PUBLIC, LENGTH_F2M_113, true); // public key TChar
+        pukTCons = KeyBuilder.buildKey(TYPE_EC_F2M_PUBLIC, LENGTH_F2M_113, true); // public key TCons
+        pukc     = KeyBuilder.buildKey(TYPE_EC_F2M_PUBLIC, LENGTH_F2M_113, true);       // public key Card
+        prkc     = KeyBuilder.buildKey(TYPE_EC_F2M_PRIVATE, LENGTH_F2M_113, true);       // private key Card
+        prrkc    = KeyBuilder.buildKey(TYPE_EC_F2M_PRIVATE, LENGTH_F2M_193, true);      // private rekey Card
+        puks     = KeyBuilder.buildKey(TYPE_EC_F2M_PUBLIC, LENGTH_F2M_193, true);       // Server certificate verification key
+        CCert;      // Server certificate verification key
+
+       
+
+        /*xy = JCSystem.makeTransientShortArray((short) 2, JCSystem.CLEAR_ON_RESET);
+        lastOp = JCSystem.makeTransientByteArray((short) 1, JCSystem.CLEAR_ON_RESET);
+        lastKeyWasDigit = JCSystem.makeTransientBooleanArray((short) 1, JCSystem.CLEAR_ON_RESET);
+        m = 0;*/
         register();
     }
+    // original code: ===========================================================================
 
     public static void install(byte[] buffer, short offset, byte length)
             throws SystemException {
