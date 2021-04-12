@@ -51,6 +51,7 @@ import applet.CardApplet;
  */
 public class TChar extends JPanel implements ActionListener {
 
+
     //private JavaxSmartCardInterface simulatorInterface; // SIM
 
     private static final long serialVersionUID = 1L;

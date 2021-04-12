@@ -50,6 +50,16 @@ import applet.CardApplet;
  * 
  */
 public class TCons extends JPanel implements ActionListener {
+    //keys
+    private ECPublicKey pukc;             // public key Card
+    private ECPrivateKey prkTCons;        // private key TCons
+    private ECPublicKey purkTCons;        // public rekey TCons
+    private ECPublicKey puks;             // Server certificate verification key
+    private byte[] TCert;                 // Terminal certificate signed with prks
+
+    private AESKey skey;                  // Session key
+
+    private byte[] ID;                    //ID of the terminal
 
     //private JavaxSmartCardInterface simulatorInterface; // SIM
 
@@ -76,6 +86,16 @@ public class TCons extends JPanel implements ActionListener {
     CardChannel applet;
 
     public TCons(JFrame parent) {
+        skey      = KeyBuilder.buildKey(TYPE_AES_TRANSIENT_DESELECT, LENGTH_AES_128, true);   // session key
+
+        pukc      = KeyBuilder.buildKey(TYPE_EC_F2M_PUBLIC, LENGTH_F2M_113, true);         // public key Card
+        prkTCons  = KeyBuilder.buildKey(TYPE_EC_F2M_PRIVATE, LENGTH_F2M_113, true);        // private key TCons
+        purkTCons = KeyBuilder.buildKey(TYPE_EC_F2M_PUBLIC, LENGTH_F2M_193, true);         // public rekey TCons
+        puks      = KeyBuilder.buildKey(TYPE_EC_F2M_PUBLIC, LENGTH_F2M_193, true);         // certificate verification key
+
+        TCert;                                                                             // Terminal certificate containing
+                                                                                           // ID, type of device and expiry date
+
         //simulatorInterface = new JavaxSmartCardInterface(); // SIM
         buildGUI(parent);
         setEnabled(false);
