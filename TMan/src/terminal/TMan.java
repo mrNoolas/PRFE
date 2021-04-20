@@ -30,9 +30,9 @@ import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JTextField;
 
-// imports for using JCardSim 
-//import com.licel.jcardsim.io.JavaxSmartCardInterface; 
-//import com.licel.jcardsim.smartcardio.JCardSimProvider; 
+// imports for using JCardSim
+//import com.licel.jcardsim.io.JavaxSmartCardInterface;
+//import com.licel.jcardsim.smartcardio.JCardSimProvider;
 import com.licel.jcardsim.smartcardio.CardTerminalSimulator;
 import com.licel.jcardsim.smartcardio.CardSimulator;
 
@@ -42,12 +42,12 @@ import applet.CardApplet;
  * Sample terminal for the Calculator applet.
  *
  * Code added for hooking in the simulator is marked with SIM
- * 
+ *
  * @author Martijno
  * @author woj
  * @author Pim Vullers
  * @author erikpoll
- * 
+ *
  */
 public class TMan extends JPanel implements ActionListener {
 
@@ -69,11 +69,34 @@ public class TMan extends JPanel implements ActionListener {
 
     static final CommandAPDU SELECT_APDU = new CommandAPDU(
     		(byte) 0x00, (byte) 0xA4, (byte) 0x04, (byte) 0x00, CALC_APPLET_AID);
-    
+
     JTextField display;
     JPanel keypad;
 
     CardChannel applet;
+
+    // keys
+    private ECPrivateKey prTMan;    // private key TMan
+    private ECPublicKey pubTMan;    // private key TMan
+    private ECPublicKey pukTChar;   // public key TChar
+    private ECPublicKey pukTCons;   // public key TCons
+    private ECPublicKey pukc;       // public key Card
+    private ECPrivateKey prrkt;      // private rekey Terminal
+    private ECPublicKey puks;       // Server certificate verification key
+    private byte[] CCert;      // Server certificate verification key
+
+    private AESKey skey;
+
+    // Keeps track of authentication and card state
+    // 0x00 unitialised
+    // 0x01 terminal authenticated as TMan
+    // 0x02 terminal authenticated as TChar
+    // 0x03 terminal authenticated as TCons
+    // 0x11 terminal authenticated as TMan and card authenticated
+    // 0x12 terminal authenticated as TChar and card authenticated
+    // 0x13 terminal authenticated as TCons and card authenticated
+    // User authentication is handled by the PIN class
+    private byte[] status;
 
     public TMan(JFrame parent) {
         //simulatorInterface = new JavaxSmartCardInterface(); // SIM
@@ -193,7 +216,7 @@ public class TMan extends JPanel implements ActionListener {
     	    		System.err.println("No terminals with a card found.");
     	    		return;
     	    	}
-    	    	
+
     	    	while (true) {
     	    		try {
     	    			for(CardTerminal c : cs) {
@@ -265,10 +288,10 @@ public class TMan extends JPanel implements ActionListener {
 
           // Insert Card into "My terminal 1"
           simulator.assignToTerminal(terminal1);
-                
+
           try {
             Card card = terminal1.connect("*");
-    	    	
+
     	    applet = card.getBasicChannel();
     	    ResponseAPDU resp = applet.transmit(SELECT_APDU);
     	    if (resp.getSW() != 0x9000) {
