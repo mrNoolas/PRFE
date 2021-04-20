@@ -110,50 +110,41 @@ public class CardApplet extends Applet implements ISO7816 {
         }
 
         switch (ins) {
-        case '0':
-            digit((byte) 0);
+        case 0x00:
+            //read()
             break;
-        case '1':
-            digit((byte) 1);
+        case 0x10:
+            //authenticate()
             break;
-        case '2':
-            digit((byte) 2);
+        case 0x20:
+            //charge
             break;
-        case '3':
-            digit((byte) 3);
+        case 0x30:
+            //consume
             break;
-        case '4':
-            digit((byte) 4);
+        case 0x40:
+            //revoke
             break;
-        case '5':
-            digit((byte) 5);
+        case 0x50:
+            //personalise
             break;
-        case '6':
-            digit((byte) 6);
+        case 0x60:
+            //revoke
             break;
-        case '7':
-            digit((byte) 7);
+        case 0x70:
+            //personalise
             break;
-        case '8':
-            digit((byte) 8);
+        case 0x80:
+            //rekey
             break;
-        case '9':
-            digit((byte) 9);
+        case 0x90:
+            //personalise
             break;
-        case '+':
-        case '-':
-        case 'x':
-        case ':':
-        case '=':
-            operator(ins);
+        case 0xa0:
+            //rekey
             break;
-        case 'S':
-        case 'R':
-        case 'M':
-            mem(ins);
-            break;
-        case 'C':
-            select();
+        case 0xf0:
+            //reset (connection)
             break;
         default:
             ISOException.throwIt(SW_INS_NOT_SUPPORTED);
