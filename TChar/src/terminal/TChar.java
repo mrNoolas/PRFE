@@ -2,6 +2,7 @@ package terminal;
 
 import javacard.framework.AID;
 import javacard.framework.ISO7816;
+import javacard.security.*;
 
 import java.awt.BorderLayout;
 import java.awt.Color;
@@ -50,6 +51,13 @@ import applet.CardApplet;
  * 
  */
 public class TChar extends JPanel implements ActionListener {
+	
+	// keys
+	private ECPublicKey pukc; // public key Card
+	private ECPrivateKey prkTChar; // private key TChar
+	private ECPublicKey purkTChar; // public rekey key TChar
+	private byte[] puks; // certificate verification key 
+	private byte[] TCert; // Terminal certificate 
 
     //private JavaxSmartCardInterface simulatorInterface; // SIM
 
@@ -81,6 +89,34 @@ public class TChar extends JPanel implements ActionListener {
         setEnabled(false);
         (new SimulatedCardThread()).start();
     }
+	
+	public void readCard(CardApplet card) {
+		
+	}
+	
+	public void authenticateCardAndBuyer(CardApplet card) {
+		
+	}
+	
+	public byte[] hash(byte[] data) {
+		
+	}
+	
+	public boolean verify(byte[] data, byte[] key) {
+		
+	}
+	
+	public byte[] sign(byte[] data, byte[] key) {
+		
+	}
+	
+	public byte[] mac(byte[] data) {
+	
+	}
+	
+	public void updateQuota(CardApplet card, int amount) { 
+	
+	}
 
     void buildGUI(JFrame parent) {
         setLayout(new BorderLayout());
