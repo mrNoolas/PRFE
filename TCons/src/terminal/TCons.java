@@ -50,6 +50,10 @@ import applet.CardApplet;
  * 
  */
 public class TCons extends JPanel implements ActionListener {
+
+    private byte[] ID;                    // ID of the terminal
+    private byte[] Sver;                  // Software version of the Terminal
+
     //keys
     private ECPublicKey pukc;             // public key Card
     private ECPrivateKey prkTCons;        // private key TCons
@@ -58,8 +62,6 @@ public class TCons extends JPanel implements ActionListener {
     private byte[] TCert;                 // Terminal certificate signed with prks
 
     private AESKey skey;                  // Session key
-
-    private byte[] ID;                    //ID of the terminal
 
     //private JavaxSmartCardInterface simulatorInterface; // SIM
 
@@ -101,6 +103,39 @@ public class TCons extends JPanel implements ActionListener {
         setEnabled(false);
         (new SimulatedCardThread()).start();
     }
+
+    //functions
+
+    void readCard();                                                                         //default method, read information on card
+                                                                                             //(id, software version, petrol quota on card)
+
+    void authenticateCardAndBuyer(){                                                         //authenticate card and buyer before we perform any transactions
+        //authenticate card
+        //buyer provides pin to terminal
+        //terminal presents pin to card
+        //if card returns true for isValidated(), buyer is authenticated
+        //else it returns number of tries left for the pin, if this is 0, the card is blocked: exit
+    };
+
+    void consumeQuota(byte[] cardId, int amount){                                              //use an amount of petrol quota on the card
+        //amount = entered by the buyer
+        //card has quota balance
+        //if quota on card - amount < 0 : exit
+        // else
+
+    };
+
+
+    void setMaxGas(short quota);                                                                //set the max amount of gas available to the buyer based on the quota on card (a short?)
+
+    short getGasUsed();                                                                         //return the amount of gas dispensed
+
+    void sign(data, key);
+    void hash(data);
+    void mac(data);                                                                             //mac code for sending data between card and terminal, using java.crypto.Mac object?
+    void verify(data, key);
+
+    //original terminal code starts here
 
     void buildGUI(JFrame parent) {
         setLayout(new BorderLayout());
