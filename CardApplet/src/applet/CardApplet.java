@@ -68,10 +68,10 @@ public class CardApplet extends Applet implements ISO7816 {
         status[0] = 0x00; // unitialised
 
         pukTMan  = KeyBuilder.buildKey(TYPE_EC_F2M_PUBLIC, LENGTH_F2M_193, true); // public key TMan
-        pukTChar = KeyBuilder.buildKey(TYPE_EC_F2M_PUBLIC, LENGTH_F2M_113, true); // public key TChar
-        pukTCons = KeyBuilder.buildKey(TYPE_EC_F2M_PUBLIC, LENGTH_F2M_113, true); // public key TCons
-        pukc     = KeyBuilder.buildKey(TYPE_EC_F2M_PUBLIC, LENGTH_F2M_113, true);       // public key Card
-        prkc     = KeyBuilder.buildKey(TYPE_EC_F2M_PRIVATE, LENGTH_F2M_113, true);       // private key Card
+        pukTChar = KeyBuilder.buildKey(TYPE_EC_F2M_PUBLIC, LENGTH_F2M_193, true); // public key TChar
+        pukTCons = KeyBuilder.buildKey(TYPE_EC_F2M_PUBLIC, LENGTH_F2M_193, true); // public key TCons
+        pukc     = KeyBuilder.buildKey(TYPE_EC_F2M_PUBLIC, LENGTH_F2M_193, true);       // public key Card
+        prkc     = KeyBuilder.buildKey(TYPE_EC_F2M_PRIVATE, LENGTH_F2M_193, true);       // private key Card
         prrkc    = KeyBuilder.buildKey(TYPE_EC_F2M_PRIVATE, LENGTH_F2M_193, true);      // private rekey Card
         puks     = KeyBuilder.buildKey(TYPE_EC_F2M_PUBLIC, LENGTH_F2M_193, true);       // Server certificate verification key
         CCert;      // Server certificate verification key
