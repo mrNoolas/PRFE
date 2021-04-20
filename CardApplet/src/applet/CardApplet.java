@@ -109,8 +109,11 @@ public class CardApplet extends Applet implements ISO7816 {
             return;
         }
 
-        switch (ins) {
+        switch (ins & 0xf0) {
         case 0x00:
+            if (le < 4) {
+                ISOException.throwIt((short) (SW_WRONG_LENGTH | 4));
+            }
             //read()
             break;
         case 0x10:
@@ -149,6 +152,8 @@ public class CardApplet extends Applet implements ISO7816 {
         default:
             ISOException.throwIt(SW_INS_NOT_SUPPORTED);
         }
+
+        /* length check done for each instruction:
         le = apdu.setOutgoing();
         if (le < 5) {
             ISOException.throwIt((short) (SW_WRONG_LENGTH | 5));
@@ -158,54 +163,20 @@ public class CardApplet extends Applet implements ISO7816 {
         Util.setShort(buffer, (short) 3, xy[X]);
         apdu.setOutgoingLength((short) 5);
         apdu.sendBytes((short) 0, (short) 5);
+        */
     }
 
-    void digit(byte d) {
-        if (!lastKeyWasDigit[0]) {
-            xy[Y] = xy[X];
-            xy[X] = 0;
-        }
-        xy[X] = (short) ((short) (xy[X] * 10) + (short) (d & 0x00FF));
-        lastKeyWasDigit[0] = true;
-    }
+    /**
+     * Buffer is assumed to be 3 bytes long
+     */
+    void read(byte* buffer) {
 
-    void operator(byte op) throws ISOException {
-        switch (lastOp[0]) {
-        case '+':
-            xy[X] = (short) (xy[Y] + xy[X]);
-            break;
-        case '-':
-            xy[X] = (short) (xy[Y] - xy[X]);
-            break;
-        case 'x':
-            xy[X] = (short) (xy[Y] * xy[X]);
-            break;
-        case ':':
-            if (xy[X] == 0) {
-                ISOException.throwIt(SW_WRONG_DATA);
-            }
-            xy[X] = (short) (xy[Y] / xy[X]);
-            break;
-        default:
-            break;
-        }
-        lastOp[0] = op;
-        lastKeyWasDigit[0] = false;
-    }
-
-    void mem(byte op) {
-        switch (op) {
-        case 'S':
-            m = xy[X];
-            break;
-        case 'R':
-            xy[Y] = xy[X];
-            xy[X] = m;
-            break;
-        case 'M':
-            m += xy[X];
-            break;
-        }
-        lastKeyWasDigit[0] = false;
+        le = apdu.setOutgoing();
+        
+        buffer[0] = (m == 0) ? (byte) 0x00 : (byte) 0x01;
+        Util.setShort(buffer, (short) 1, (short) 0);
+        Util.setShort(buffer, (short) 3, xy[X]);
+        apdu.setOutgoingLength((short) 5);
+        apdu.sendBytes((short) 0, (short) 5);
     }
 }
