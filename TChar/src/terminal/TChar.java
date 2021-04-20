@@ -56,7 +56,7 @@ public class TChar extends JPanel implements ActionListener {
 	private ECPublicKey pukc; // public key Card
 	private ECPrivateKey prkTChar; // private key TChar
 	private ECPublicKey purkTChar; // public rekey key TChar
-	private byte[] puks; // certificate verification key 
+	private ECPublicKey puks; // certificate verification key 
 	private byte[] TCert; // Terminal certificate 
 
 
@@ -89,6 +89,11 @@ public class TChar extends JPanel implements ActionListener {
         buildGUI(parent);
         setEnabled(false);
         (new SimulatedCardThread()).start();
+		
+		pukc = KeyBuilder.buildKey(TYPE_EC_F2M_PUBLIC, LENGTH_F2M_193, true);
+		prkTChar = KeyBuilder.buildKey(TYPE_EC_F2M_PRIVATE, LENGTH_F2M_193, true);
+		purkTChar = KeyBuilder.buildKey(TYPE_EC_F2M_PUBLIC, LENGTH_F2M_193, true);
+		puks = KeyBuilder.buildKey(TYPE_EC_F2M_PUBLIC, LENGTH_F2M_193, true);
     }
 	
 	public void readCard(CardApplet card) {

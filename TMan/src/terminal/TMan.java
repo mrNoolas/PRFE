@@ -76,14 +76,16 @@ public class TMan extends JPanel implements ActionListener {
     CardChannel applet;
 
     // keys
-    private ECPrivateKey prTMan;    // private key TMan
-    private ECPublicKey pubTMan;    // private key TMan
-    private ECPublicKey pukTChar;   // public key TChar
-    private ECPublicKey pukTCons;   // public key TCons
-    private ECPublicKey pukc;       // public key Card
+    private ECPrivateKey prTMan;     // private key TMan
+    private ECPublicKey pukTMan;     // public key TChar
+    private ECPublicKey pukTChar;    // public key TChar
+    private ECPublicKey pukTCons;    // public key TCons
+    private ECPrivateKey prkc;       // private key Card
+    private ECPublicKey pukc;        // public key Card
+    private ECPrivateKey prrkc;      // private rekey Card
     private ECPrivateKey prrkt;      // private rekey Terminal
-    private ECPublicKey puks;       // Server certificate verification key
-    private byte[] CCert;      // Server certificate verification key
+    private ECPublicKey puks;        // Server certificate verification key
+    private byte[] CCert;            // Server certificate verification key
 
     private AESKey skey;
 
@@ -99,11 +101,36 @@ public class TMan extends JPanel implements ActionListener {
     private byte[] status;
 
     public TMan(JFrame parent) {
-        //simulatorInterface = new JavaxSmartCardInterface(); // SIM
+        skey = KeyBuilder.buildKey(TYPE_AES_TRANSIENT_DESELECT, LENGTH_AES_128, true);
+        status = JCSystem.makeTransientByteArray((short) 1, JCSystem.CLEAR_ON_RESET);
+        status[0] = 0x00; // unitialised
+
+        prkTMan  = KeyBuilder.buildKey(TYPE_EC_F2M_PRIVATE, LENGTH_F2M_193, true); // private key TMan
+        pukTMan  = KeyBuilder.buildKey(TYPE_EC_F2M_PUBLIC, LENGTH_F2M_193, true); // public key TMan
+        pukTChar = KeyBuilder.buildKey(TYPE_EC_F2M_PUBLIC, LENGTH_F2M_193, true); // public key TChar
+        pukTCons = KeyBuilder.buildKey(TYPE_EC_F2M_PUBLIC, LENGTH_F2M_193, true); // public key TCons
+        prkc     = KeyBuilder.buildKey(TYPE_EC_F2M_PRIVATE, LENGTH_F2M_193, true);       // private key Card
+        pukc     = KeyBuilder.buildKey(TYPE_EC_F2M_PUBLIC, LENGTH_F2M_193, true);       // public key Card
+        prrkt    = KeyBuilder.buildKey(TYPE_EC_F2M_PRIVATE, LENGTH_F2M_193, true);      // private rekey Terminal
+        prrkc    = KeyBuilder.buildKey(TYPE_EC_F2M_PRIVATE, LENGTH_F2M_193, true);      // private rekey Card
+        puks     = KeyBuilder.buildKey(TYPE_EC_F2M_PUBLIC, LENGTH_F2M_193, true);       // Server certificate verification key
+        CCert;      // Server certificate verification key
+
+
+
+        /*xy = JCSystem.makeTransientShortArray((short) 2, JCSystem.CLEAR_ON_RESET);
+        lastOp = JCSystem.makeTransientByteArray((short) 1, JCSystem.CLEAR_ON_RESET);
+        lastKeyWasDigit = JCSystem.makeTransientBooleanArray((short) 1, JCSystem.CLEAR_ON_RESET);
+        m = 0;*/
+        register();
+
+        // original code: ===========================================================================
+        /simulatorInterface = new JavaxSmartCardInterface(); // SIM
         buildGUI(parent);
         setEnabled(false);
         (new SimulatedCardThread()).start();
     }
+
 
     void buildGUI(JFrame parent) {
         setLayout(new BorderLayout());

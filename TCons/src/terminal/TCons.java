@@ -90,8 +90,8 @@ public class TCons extends JPanel implements ActionListener {
     public TCons(JFrame parent) {
         skey      = KeyBuilder.buildKey(TYPE_AES_TRANSIENT_DESELECT, LENGTH_AES_128, true);   // session key
 
-        pukc      = KeyBuilder.buildKey(TYPE_EC_F2M_PUBLIC, LENGTH_F2M_113, true);         // public key Card
-        prkTCons  = KeyBuilder.buildKey(TYPE_EC_F2M_PRIVATE, LENGTH_F2M_113, true);        // private key TCons
+        pukc      = KeyBuilder.buildKey(TYPE_EC_F2M_PUBLIC, LENGTH_F2M_193, true);         // public key Card
+        prkTCons  = KeyBuilder.buildKey(TYPE_EC_F2M_PRIVATE, LENGTH_F2M_193, true);        // private key TCons
         purkTCons = KeyBuilder.buildKey(TYPE_EC_F2M_PUBLIC, LENGTH_F2M_193, true);         // public rekey TCons
         puks      = KeyBuilder.buildKey(TYPE_EC_F2M_PUBLIC, LENGTH_F2M_193, true);         // certificate verification key
 
@@ -106,10 +106,10 @@ public class TCons extends JPanel implements ActionListener {
 
     //functions
 
-    void readCard();                                                                         //default method, read information on card
+    public void readCard(CardApplet card);                                                          //default method, read information on card
                                                                                              //(id, software version, petrol quota on card)
 
-    void authenticateCardAndBuyer(){                                                         //authenticate card and buyer before we perform any transactions
+    public void authenticateCardAndBuyer(CardApplet card){                                                         //authenticate card and buyer before we perform any transactions
         //authenticate card
         //buyer provides pin to terminal
         //terminal presents pin to card
@@ -117,7 +117,7 @@ public class TCons extends JPanel implements ActionListener {
         //else it returns number of tries left for the pin, if this is 0, the card is blocked: exit
     };
 
-    void consumeQuota(byte[] cardId, int amount){                                              //use an amount of petrol quota on the card
+    public void consumeQuota(CardApplet card, int amount){                                              //use an amount of petrol quota on the card
         //amount = entered by the buyer
         //card has quota balance
         //if quota on card - amount < 0 : exit
@@ -126,14 +126,15 @@ public class TCons extends JPanel implements ActionListener {
     };
 
 
-    void setMaxGas(short quota);                                                                //set the max amount of gas available to the buyer based on the quota on card (a short?)
+    void setMaxGas(CardApplet card, short quota);                                                                //set the max amount of gas available to the buyer based on the quota on card (a short?)
 
-    short getGasUsed();                                                                         //return the amount of gas dispensed
+    short getGasUsed();                                                                                          //return the amount of gas dispensed
 
-    void sign(data, key);
-    void hash(data);
-    void mac(data);                                                                             //mac code for sending data between card and terminal, using java.crypto.Mac object?
-    void verify(data, key);
+    void sign(byte[] data, byte[] key);
+
+    public byte[] hash(byte[] data);
+    public byte[] mac(byte[] data);                                                                             //mac code for sending data between card and terminal, using java.crypto.Mac object?
+    public boolean verify(byte[] data, byte[] key);
 
     //original terminal code starts here
 
