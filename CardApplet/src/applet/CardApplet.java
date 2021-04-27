@@ -84,25 +84,27 @@ public class CardApplet extends Applet implements ISO7816 {
         m = 0;*/
         register();
     }
-    // original code: ===========================================================================
+    
 
     public static void install(byte[] buffer, short offset, byte length)
             throws SystemException {
         new CardApplet();
     }
-
+    
     public boolean select() {
+        status[0] = 0x00; // unitialised
         xy[X] = 0;
         xy[Y] = 0;
         lastOp[0] = (byte) '=';
         lastKeyWasDigit[0] = false;
         return true;
     }
+   
 
     public void process(APDU apdu) throws ISOException, APDUException {
         byte[] buffer = apdu.getBuffer();
         byte ins = buffer[OFFSET_INS];
-        short le = -1;
+        short length = apdu.getIncomingLength();
 
         /* Ignore the APDU that selects this applet... */
         if (selectingApplet()) {
@@ -111,7 +113,7 @@ public class CardApplet extends Applet implements ISO7816 {
 
         switch (ins & 0xf0) {
         case 0x00:
-            if (le < 4) {
+            if (length < 4) {
                 ISOException.throwIt((short) (SW_WRONG_LENGTH | 4));
             }
             //read()
@@ -154,8 +156,8 @@ public class CardApplet extends Applet implements ISO7816 {
         }
 
         /* length check done for each instruction:
-        le = apdu.setOutgoing();
-        if (le < 5) {
+        length = apdu.setOutgoing();
+        if (length < 5) {
             ISOException.throwIt((short) (SW_WRONG_LENGTH | 5));
         }
         buffer[0] = (m == 0) ? (byte) 0x00 : (byte) 0x01;
@@ -170,8 +172,8 @@ public class CardApplet extends Applet implements ISO7816 {
      * Buffer is assumed to be 3 bytes long
      */
     void read(byte* buffer) {
-
-        le = apdu.setOutgoing();
+        // set the data transfer direction to outbound and to obtain the expected length of response
+        length = apdu.setOutgoing();
         
         buffer[0] = (m == 0) ? (byte) 0x00 : (byte) 0x01;
         Util.setShort(buffer, (short) 1, (short) 0);
@@ -179,4 +181,6 @@ public class CardApplet extends Applet implements ISO7816 {
         apdu.setOutgoingLength((short) 5);
         apdu.sendBytes((short) 0, (short) 5);
     }
+    
+     
 }
