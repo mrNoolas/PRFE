@@ -229,79 +229,71 @@ public class TMan extends JPanel implements ActionListener {
         }
     }
 
-    /* Original code to connect the terminal with a physical smartcard
-     * in a reader using javax.smartcardio
-     */
-    /*
-    class CardThread extends Thread {
-        public void run() {
-            try {
-            	TerminalFactory tf = TerminalFactory.getDefault();
-    	    	CardTerminals ct = tf.terminals();
-    	    	List<CardTerminal> cs = ct.list(CardTerminals.State.CARD_PRESENT);
-    	    	if (cs.isEmpty()) {
-    	    		System.err.println("No terminals with a card found.");
-    	    		return;
-    	    	}
-
-    	    	while (true) {
-    	    		try {
-    	    			for(CardTerminal c : cs) {
-    	    				if (c.isCardPresent()) {
-    	    					try {
-    	    						Card card = c.connect("*");
-    	    						try {
-    	    							applet = card.getBasicChannel();
-    	    							ResponseAPDU resp = applet.transmit(SELECT_APDU);
-    	    							if (resp.getSW() != 0x9000) {
-    	    								throw new Exception("Select failed");
-    	    							}
-    	    	    	    			setText(sendKey((byte) '='));
-    	    	                        setEnabled(true);
-
-    	    	                        // Wait for the card to be removed
-    	    	                        while (c.isCardPresent());
-    	    	                        setEnabled(false);
-    	    	                        setText(MSG_DISABLED);
-    	    	                        break;
-    	    						} catch (Exception e) {
-    	    							System.err.println("Card does not contain CardApplet?!");
-    	    							setText(MSG_INVALID);
-    	    							sleep(2000);
-    	    							setText(MSG_DISABLED);
-    	    							continue;
-    	    						}
-    	    					} catch (CardException e) {
-    	    						System.err.println("Couldn't connect to card!");
-    	    						setText(MSG_INVALID);
-    	    						sleep(2000);
-    	    						setText(MSG_DISABLED);
-    	    						continue;
-    	    					}
-    	    				} else {
-    	    					System.err.println("No card present!");
-    	    					setText(MSG_INVALID);
-    	    					sleep(2000);
-    	    					setText(MSG_DISABLED);
-    	    					continue;
-    	    				}
-    	    			}
-    	    		} catch (CardException e) {
-    	    			System.err.println("Card status problem!");
-    	    		}
-    	    	}
-            } catch (Exception e) {
-                setEnabled(false);
-                setText(MSG_ERROR);
-                System.out.println("ERROR: " + e.getMessage());
-                e.printStackTrace();
-            }
-        }
+    public boolean disableManageable(){
+      //set managable on card to false
+      //return true on succes
     }
-    */
 
-    /* Connect the terminal with a simulated smartcard JCardSim
-     */
+    public boolean getManageable(){
+      //get the managable status from card and return this
+    }
+
+    public String getInfo(){
+      //get version number
+    }
+
+    public boolean updateSoftware(){
+      //do we even want to program this or just as a placeholder?
+    }
+
+    public String getOwner(){
+      //get owner name
+    }
+
+    public boolean setOwner(String name){
+      if(!getManagable()){
+        return false;
+      } else {
+        // set owner
+        // on succes return true
+        return true;
+      }
+    }
+
+    public boolean setKey(int keyNumber, String key) {
+      if(!getManagable()){
+        return false;
+      } else {
+        // set one key
+        // on succes return true
+        return true;
+      }
+    }
+
+    public boolean setKeys(String[] keys) {
+      if(!getManagable()){
+        return false;
+      } else {
+        // set all keys at once
+        // on succes return true
+        return true;
+      }
+    }
+
+    public boolean setPetrolCredits(int PC) {
+      // change pc on card to PC
+      // return true on succes
+    }
+
+    public int getPetrolCredits() {
+      // get the pc that are on the card
+      // return an int
+    }
+
+    public boolean rekeyCard(){
+      // do some magic to rekey the card
+    }
+
     class SimulatedCardThread extends Thread {
         public void run() {
           // Obtain a CardTerminal
