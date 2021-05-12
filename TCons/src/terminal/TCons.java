@@ -30,6 +30,8 @@ import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JTextField;
 
+import javacard.security.*;
+import javax.crypto.*;
 // imports for using JCardSim 
 //import com.licel.jcardsim.io.JavaxSmartCardInterface; 
 //import com.licel.jcardsim.smartcardio.JCardSimProvider; 
@@ -88,12 +90,12 @@ public class TCons extends JPanel implements ActionListener {
     CardChannel applet;
 
     public TCons(JFrame parent) {
-        skey      = KeyBuilder.buildKey(TYPE_AES_TRANSIENT_DESELECT, LENGTH_AES_128, true);   // session key
+        skey      = (AESKey) KeyBuilder.buildKey(KeyBuilder.TYPE_AES_TRANSIENT_DESELECT, KeyBuilder.LENGTH_AES_128, true);   // session key
 
-        pukc      = KeyBuilder.buildKey(TYPE_EC_F2M_PUBLIC, LENGTH_F2M_193, true);         // public key Card
-        prkTCons  = KeyBuilder.buildKey(TYPE_EC_F2M_PRIVATE, LENGTH_F2M_193, true);        // private key TCons
-        purkTCons = KeyBuilder.buildKey(TYPE_EC_F2M_PUBLIC, LENGTH_F2M_193, true);         // public rekey TCons
-        puks      = KeyBuilder.buildKey(TYPE_EC_F2M_PUBLIC, LENGTH_F2M_193, true);         // certificate verification key
+        pukc      = (ECPublicKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_F2M_PUBLIC, KeyBuilder.LENGTH_F2M_193, true);         // public key Card
+        prkTCons  = (ECPrivateKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_F2M_PRIVATE, KeyBuilder.LENGTH_F2M_193, true);        // private key TCons
+        purkTCons = (ECPublicKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_F2M_PUBLIC, KeyBuilder.LENGTH_F2M_193, true);         // public rekey TCons
+        puks      = (ECPublicKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_F2M_PUBLIC, KeyBuilder.LENGTH_F2M_193, true);         // certificate verification key
 
         TCert;                                                                             // Terminal certificate containing
                                                                                            // ID, type of device and expiry date
@@ -106,8 +108,12 @@ public class TCons extends JPanel implements ActionListener {
 
     //functions
 
-    public void readCard(CardApplet card);                                                          //default method, read information on card
-                                                                                             //(id, software version, petrol quota on card)
+    public void readCard(CardApplet card){                                                 //default method, read information on card
+        //send APDU to card containing the INS byte 0x00?
+        //card sends back apdu with the data?
+        //process the response apdu and display the information on the terminal?
+    };
+                                                                                                    //(id, software version, petrol quota on card)
 
     public void authenticateCardAndBuyer(CardApplet card){                                                         //authenticate card and buyer before we perform any transactions
         //authenticate card
@@ -117,23 +123,42 @@ public class TCons extends JPanel implements ActionListener {
         //else it returns number of tries left for the pin, if this is 0, the card is blocked: exit
     };
 
-    public void consumeQuota(CardApplet card, int amount){                                              //use an amount of petrol quota on the card
+    public void consumeQuota(CardApplet card, int amount){                                                        //use an amount of petrol quota on the card
         //amount = entered by the buyer
         //card has quota balance
         //if quota on card - amount < 0 : exit
-        // else
+        //else
 
     };
 
 
-    void setMaxGas(CardApplet card, short quota);                                                                //set the max amount of gas available to the buyer based on the quota on card (a short?)
+    void setMaxGas(CardApplet card);                                                                             //set the max amount of gas available to the buyer based on the quota on card (a short?)
 
     short getGasUsed();                                                                                          //return the amount of gas dispensed
 
     void sign(byte[] data, byte[] key);
 
-    public byte[] hash(byte[] data);
-    public byte[] mac(byte[] data);                                                                             //mac code for sending data between card and terminal, using java.crypto.Mac object?
+    public byte[] hash(byte[] data){
+        //create message digest using a certain hash algorithm
+        MessageDigest md = MessageDigest.getInstance("") //TODO: decide hash algorithm?
+        //use hash to hash the data
+        md.update(data);
+        //generate the hash of the data
+        byte[] hash = md.digest();
+        return hash;
+
+    };
+
+    public byte[] mac(byte[] data){                                                                              //mac code for sending data between card and terminal, using java.crypto.Mac object?
+        //create mac object
+        Mac mac = Mac.getInstance(""); //TODO: algorithm for mac?
+        //initialise the Mac object with the skey
+        mac.init(skey);
+        //compute mac
+        byte[] macResult = mac.doFinal(data);
+        return macResult;
+    };
+
     public boolean verify(byte[] data, byte[] key);
 
     //original terminal code starts here
@@ -235,76 +260,6 @@ public class TCons extends JPanel implements ActionListener {
         }
     }
 
-    /* Original code to connect the terminal with a physical smartcard
-     * in a reader using javax.smartcardio
-     */
-    /*
-    class CardThread extends Thread {
-        public void run() {
-            try {
-            	TerminalFactory tf = TerminalFactory.getDefault();
-    	    	CardTerminals ct = tf.terminals();
-    	    	List<CardTerminal> cs = ct.list(CardTerminals.State.CARD_PRESENT);
-    	    	if (cs.isEmpty()) {
-    	    		System.err.println("No terminals with a card found.");
-    	    		return;
-    	    	}
-    	    	
-    	    	while (true) {
-    	    		try {
-    	    			for(CardTerminal c : cs) {
-    	    				if (c.isCardPresent()) {
-    	    					try {
-    	    						Card card = c.connect("*");
-    	    						try {
-    	    							applet = card.getBasicChannel();
-    	    							ResponseAPDU resp = applet.transmit(SELECT_APDU);
-    	    							if (resp.getSW() != 0x9000) {
-    	    								throw new Exception("Select failed");
-    	    							}
-    	    	    	    			setText(sendKey((byte) '='));
-    	    	                        setEnabled(true);
-
-    	    	                        // Wait for the card to be removed
-    	    	                        while (c.isCardPresent());
-    	    	                        setEnabled(false);
-    	    	                        setText(MSG_DISABLED);
-    	    	                        break;
-    	    						} catch (Exception e) {
-    	    							System.err.println("Card does not contain CardApplet?!");
-    	    							setText(MSG_INVALID);
-    	    							sleep(2000);
-    	    							setText(MSG_DISABLED);
-    	    							continue;
-    	    						}
-    	    					} catch (CardException e) {
-    	    						System.err.println("Couldn't connect to card!");
-    	    						setText(MSG_INVALID);
-    	    						sleep(2000);
-    	    						setText(MSG_DISABLED);
-    	    						continue;
-    	    					}
-    	    				} else {
-    	    					System.err.println("No card present!");
-    	    					setText(MSG_INVALID);
-    	    					sleep(2000);
-    	    					setText(MSG_DISABLED);
-    	    					continue;
-    	    				}
-    	    			}
-    	    		} catch (CardException e) {
-    	    			System.err.println("Card status problem!");
-    	    		}
-    	    	}
-            } catch (Exception e) {
-                setEnabled(false);
-                setText(MSG_ERROR);
-                System.out.println("ERROR: " + e.getMessage());
-                e.printStackTrace();
-            }
-        }
-    }
-    */
 
     /* Connect the terminal with a simulated smartcard JCardSim
      */
