@@ -46,7 +46,7 @@ public class CardApplet extends Applet implements ISO7816 {
  
     private OwnerPIN pin = OwnerPIN(PIN_TRY_LIMIT, PIN_SIZE);
 
-    // Determines whether the card is in peronalisation phase
+    // Determines whether the card is in personalisation phase
     private boolean managable = true;
 
     private byte[] tInfo; // contains: 0: type; 1: software version; 2,3,4,5: terminal ID
