@@ -104,19 +104,42 @@ public class CardApplet extends Applet implements ISO7816 {
     public void process(APDU apdu) throws ISOException, APDUException {
         byte[] buffer = apdu.getBuffer();
         byte ins = buffer[OFFSET_INS];
-        short length = apdu.getIncomingLength();
+        byte lc_length = apdu.getIncomingLength();
 
         /* Ignore the APDU that selects this applet... */
         if (selectingApplet()) {
             return;
         }
 
-        switch (ins & 0xf0) {
+        switch (ins) {
         case 0x00:
-            if (length < 4) {
-                ISOException.throwIt((short) (SW_WRONG_LENGTH | 4));
+            // TODO: Check whether this is a case 3 or case 4 command?
+
+            /*
+             * READ instruction:
+             * INS: 0x00
+             * P1: Terminal Type 
+             * P2: Terminal Software Version
+             * Lc: should be 2
+             * Data: 16 bits of Terminal ID (2 bytes)
+             */
+
+
+            if (lc_length < (byte) 2) {
+                ISOException.throwIt((short) (SW_WRONG_LENGTH | 2));
             }
-            //read()
+            
+            // TODO: check P1 and P2 for validity
+            byte tType = buffer[OFFSET_P1];
+            byte tSoftVersion = buffer[OFFSET_P2];
+            
+            // read the two bytes into the apdu buffer
+            apdu.setIncomingAndReceive();
+            buffer = apdu.getBuffer();
+
+            short tID = (buffer[(byte) 0] << 8) & buffer[(byte) 1]; 
+
+            read()
             break;
         case 0x10:
             //authenticate()
@@ -173,7 +196,7 @@ public class CardApplet extends Applet implements ISO7816 {
      */
     void read(byte* buffer) {
         // set the data transfer direction to outbound and to obtain the expected length of response
-        length = apdu.setOutgoing();
+        lc_length = apdu.setOutgoing();
         
         buffer[0] = (m == 0) ? (byte) 0x00 : (byte) 0x01;
         Util.setShort(buffer, (short) 1, (short) 0);
