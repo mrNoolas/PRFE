@@ -23,9 +23,11 @@ import javacard.framework.*;
 import javacard.security.*;
 
 public class CardApplet extends Applet implements ISO7816 {
-    private static final byte SOFTWARE_VERSION = (byte) 0;
-
     final static byte PRFE_CLA = (byte) 0xB0;
+    private static final byte CARD_SOFTWARE_VERSION = 0x0;
+    private static final byte CARD_TYPE = 0x0; // Regular card
+    
+
 
     // keys
     private ECPublicKey pukTMan;    // public key TMan
@@ -47,8 +49,9 @@ public class CardApplet extends Applet implements ISO7816 {
     // Determines whether the card is in peronalisation phase
     private boolean managable = true;
 
-    private byte[] tID;
+    private byte[] tInfo; // contains: 0: type; 1: software version; 2,3,4,5: terminal ID
     private byte[] cID;
+
     private short petrolCredits = (short) 0;
 
     private Object[] transactionLog;
@@ -80,8 +83,8 @@ public class CardApplet extends Applet implements ISO7816 {
         puks     = KeyBuilder.buildKey(TYPE_EC_F2M_PUBLIC, LENGTH_F2M_193, true);       // Server certificate verification key
         CCert;      // Server certificate verification key
 
-        cID = JCSystem.makeTransientByteArray((short) 4, JCSystem.CLEAR_ON_RESET);
-        tID = JCSystem.makeTransientByteArray((short) 4, JCSystem.CLEAR_ON_RESET);
+        cID = new byte[4]();
+        tInfo = JCSystem.makeTransientByteArray((short) 6, JCSystem.CLEAR_ON_RESET);
 
         /*xy = JCSystem.makeTransientShortArray((short) 2, JCSystem.CLEAR_ON_RESET);
         lastOp = JCSystem.makeTransientByteArray((short) 1, JCSystem.CLEAR_ON_RESET);
@@ -98,7 +101,7 @@ public class CardApplet extends Applet implements ISO7816 {
     
     public boolean select() {
         status[0] = 0x00; // unitialised
-        tID[0] = 0x0000; // sets entire array to 0 (4 bytes)
+        tInfo[0] = 0x000000; // sets entire array to 0 (4 bytes)
 
         return true;
     }
@@ -131,17 +134,17 @@ public class CardApplet extends Applet implements ISO7816 {
             }
             
             // TODO: check P1 and P2 for validity
-            byte tType = buffer[OFFSET_P1];
-            byte tSoftVersion = buffer[OFFSET_P2];
+            tInfo[0] = buffer[OFFSET_P1]; // terminal type
+            tInfo[1] = buffer[OFFSET_P2]; // terminal software version
             
-            // read the two bytes into the apdu buffer
+            // read the terminal ID into the apdu buffer
             apdu.setIncomingAndReceive();
             buffer = apdu.getBuffer();
 
-            tID[0] = buffer[(byte) 0];
-            tID[1] = buffer[(byte) 1]; 
-            tID[2] = buffer[(byte) 2]; 
-            tID[3] = buffer[(byte) 3]; 
+            tInfo[2] = buffer[(byte) 0];
+            tInfo[3] = buffer[(byte) 1]; 
+            tInfo[4] = buffer[(byte) 2]; 
+            tInfo[5] = buffer[(byte) 3]; 
 
             read()
             break;
@@ -200,9 +203,9 @@ public class CardApplet extends Applet implements ISO7816 {
      */
     void read(byte* buffer) {
         // set the data transfer direction to outbound and to obtain the expected length of response
-        lc_length = apdu.setOutgoing();
+        expectedLength = apdu.setOutgoing();
         
-        if (lc_length < 2) ISOException.throwIt((short) (SW_WRONG_LENGTH | 2));
+        if (expectedLength < 6) ISOException.throwIt((short) (SW_WRONG_LENGTH | 6));
         
         /*
          * Return answer with some general data about the card:
@@ -213,14 +216,16 @@ public class CardApplet extends Applet implements ISO7816 {
          * Data: 16 bits of Card ID (2 bytes)
          */
 
-        apdu.setOutgoingLength((byte) 4);
+        apdu.setOutgoingLength((byte) 6);
         
-        buffer[0] = (byte) cID[0];
-        buffer[1] = (byte) cID[1];
-        buffer[2] = (byte) cID[2];
-        buffer[3] = (byte) cID[3];
+        buffer[0] = (byte) CARD_TYPE;
+        buffer[1] = (byte) CARD_SOFTWARE_VERSION; 
+        buffer[2] = (byte) cID[0];
+        buffer[3] = (byte) cID[1];
+        buffer[4] = (byte) cID[2];
+        buffer[5] = (byte) cID[3];
         
-        apdu.sendBytes((short) 0, (short) 4);
+        apdu.sendBytes((short) 0, (short) 5);
     }
     
      
