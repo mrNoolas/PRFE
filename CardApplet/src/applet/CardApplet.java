@@ -23,11 +23,14 @@ import javacard.framework.*;
 import javacard.security.*;
 
 public class CardApplet extends Applet implements ISO7816 {
-    final static byte PRFE_CLA = (byte) 0xB0;
+    private static final byte PRFE_CLA = (byte) 0xB0;
     private static final byte CARD_SOFTWARE_VERSION = 0x0;
     private static final byte CARD_TYPE = 0x0; // Regular card
     
+    private static final byte PIN_TRY_LIMIT = (byte) 4;
+    private static final byte PIN_SIZE = (byte) 6;
 
+    private static final short MAX_PETROL_CREDITS = (short) 10000;
 
     // keys
     private ECPublicKey pukTMan;    // public key TMan
@@ -41,18 +44,15 @@ public class CardApplet extends Applet implements ISO7816 {
 
     private AESKey skey;
  
-    // Pin
-    private static final byte pintrylimit = (byte) 3;
-    private static final byte pinsizelimit = (byte) 6;
-    private OwnerPIN pin = OwnerPIN(pintrylimit, pinsizelimit);
+    private OwnerPIN pin = OwnerPIN(PIN_TRY_LIMIT, PIN_SIZE);
 
     // Determines whether the card is in peronalisation phase
     private boolean managable = true;
 
     private byte[] tInfo; // contains: 0: type; 1: software version; 2,3,4,5: terminal ID
-    private byte[] cID;
+    private byte[] cID; // 4 bytes of card ID
 
-    private short petrolCredits = (short) 0;
+    private short petrolCredits;
 
     private Object[] transactionLog;
     private byte[] lastKnownTime;
@@ -85,6 +85,8 @@ public class CardApplet extends Applet implements ISO7816 {
 
         cID = new byte[4]();
         tInfo = JCSystem.makeTransientByteArray((short) 6, JCSystem.CLEAR_ON_RESET);
+        
+        petrolCredits = (short) 0;
 
         /*xy = JCSystem.makeTransientShortArray((short) 2, JCSystem.CLEAR_ON_RESET);
         lastOp = JCSystem.makeTransientByteArray((short) 1, JCSystem.CLEAR_ON_RESET);
