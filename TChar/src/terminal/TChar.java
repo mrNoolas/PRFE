@@ -90,38 +90,64 @@ public class TChar extends JPanel implements ActionListener {
         setEnabled(false);
         (new SimulatedCardThread()).start();
 		
+		skey = (AESKey) KeyBuilder.buildKey(KeyBuilder.TYPE_AES_TRANSIENT_DESELECT, KeyBuilder.LENGTH_AES_128,true);
 		pukc = KeyBuilder.buildKey(TYPE_EC_F2M_PUBLIC, LENGTH_F2M_193, true);
 		prkTChar = KeyBuilder.buildKey(TYPE_EC_F2M_PRIVATE, LENGTH_F2M_193, true);
 		purkTChar = KeyBuilder.buildKey(TYPE_EC_F2M_PUBLIC, LENGTH_F2M_193, true);
 		puks = KeyBuilder.buildKey(TYPE_EC_F2M_PUBLIC, LENGTH_F2M_193, true);
+		TCert;
     }
 	
-	public void readCard(CardApplet card) {
-		
+	public void readCard(CardApplet card) {  
+		// This function reads the information from the presented card given by parameter card
+		// Send APDU to card
+		// Receive APDU from card containing a response
+		// Process response
+		// Show response on terminal
 	}
 	
 	public void authenticateCardAndBuyer(CardApplet card) {
-		
+		// This function ensures that the card and the buyer are properly authenticated before starting a transaction
+		// Authenticate the card
+		// User enters PIN 
+		// Terminal accepts PIN: user is authenticated 
+		// Terminal declines PIN: user is not authenticated 
 	}
 	
 	public byte[] hash(byte[] data) {
+		// Hash the message using hash function
+		MessageDigest md = MessageDigest.getInstance("");
+		md.update(data);
 		
+		byte[] hash = md.digest();
+		return hash;
 	}
 	
 	public boolean verify(byte[] data, byte[] key) {
-		
+		// Verify if a given signature is correct
+		// If correct: output true
+		// If incorrect: output false
 	}
 	
 	public byte[] sign(byte[] data, byte[] key) {
+		// Sign a given message to ensure integrity
 		
 	}
 	
 	public byte[] mac(byte[] data) {
-	
+		// Returns the MAC of the data
+		Mac mac = Mac.getInstance("");
+		mac.init(skey);
+		
+		byte[] macResult = mac.doFinal(data);
+		return macResult;
 	}
 	
 	public void updateQuota(CardApplet card, int amount) { 
-	
+		// Updates the quota on the card
+		// Requires authenticateCardAndBuyer() 
+		// new_amount = old_amount + quota 
+		
 	}
 
     void buildGUI(JFrame parent) {
