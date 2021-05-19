@@ -1,24 +1,5 @@
 package applet;
 
-
-/** * Sample Java Card Calculator applet which operates on signed shorts. Overflow * is silent.
-*
-* The instructions are the ASCII characters of the keypad keys: '0' - '9', '+',
-* '-', * 'x', ':', '=', etc. This means that the terminal should send an APDU
-* for each key pressed.
-*
-* Response APDU consists of 5 data bytes. First byte indicates whether the M
-* register contains a non-zero value. The third and fourth bytes encode the X
-* register (the signed short value to be displayed).
-*
-* The only non-transient field is m. This means that m is stored in EEPROM and
-* all other memory used is RAM.
-*
-* @author Martijn Oostdijk (martijno@cs.kun.nl)
-* @author Wojciech Mostowski (woj@cs.ru.nl)
-*
-*/
-
 import javacard.framework.*;
 import javacard.security.*;
 
@@ -34,24 +15,37 @@ private static final byte PIN_SIZE = (byte) 6;
 private static final short MAX_PETROL_CREDITS = (short) 10000;
 
 // keys
+private AESKey skey;
+
 private ECPublicKey pukTMan;    // public key TMan
 private ECPublicKey pukTChar;   // public key TChar
 private ECPublicKey pukTCons;   // public key TCons
 private ECPublicKey pukc;       // public key Card
 private ECPrivateKey prkc;       // private key Card
-private ECPrivateKey prrkc;      // private rekey Card
+private ECPublicKey purkc;      // private rekey Card
 private ECPublicKey puks;       // Server certificate verification key
 private byte[] CCert;      // Server certificate verification key
 
-private AESKey skey;
+// Key offsets in personalisation messages:
+private static final short PUKTMAN_PERS_OFFSET = 0;
+private static final short PUKTCHAR_PERS_OFFSET = 25;
+private static final short PUKTCONS_PERS_OFFSET = 50;
+private static final short PUKC_PERS_OFFSET = 75;
+private static final short PRKC_PERS_OFFSET = 100;
+private static final short PURKC_PERS_OFFSET = 125;
+private static final short PUKS_PERS_OFFSET = 150;
+private static final short CCERT_PERS_OFFSET = 175;
+private static final short PIN_PERS_OFFSET = 195;
 
-private OwnerPIN pin;
+private static final short EC_KEY_LENGTH = 25;
+private static final short EC_CERT_LENGTH = 20;
 
 // Determines whether the card is in personalisation phase
-private boolean managable = true;
+private boolean manageable = true;
 
 private byte[] tInfo; // contains: 0: type; 1: software version; 2,3,4,5: terminal ID
 private byte[] cID; // 4 bytes of card ID
+private OwnerPIN pin;
 
 private short petrolCredits;
 
@@ -81,7 +75,7 @@ public CardApplet() {
     pukTCons = (ECPublicKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_F2M_PUBLIC, KeyBuilder.LENGTH_EC_F2M_193, true); // public key TCons
     pukc     = (ECPublicKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_F2M_PUBLIC, KeyBuilder.LENGTH_EC_F2M_193, true);       // public key Card
     prkc     = (ECPrivateKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_F2M_PRIVATE, KeyBuilder.LENGTH_EC_F2M_193, true);       // private key Card
-    prrkc    = (ECPrivateKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_F2M_PRIVATE, KeyBuilder.LENGTH_EC_F2M_193, true);      // private rekey Card
+    purkc    = (ECPublicKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_F2M_PUBLIC, KeyBuilder.LENGTH_EC_F2M_193, true);      // private rekey Card
     puks     = (ECPublicKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_F2M_PUBLIC, KeyBuilder.LENGTH_EC_F2M_193, true);       // Server certificate verification key
     //CCert;      // Server certificate verification key
 
@@ -114,6 +108,7 @@ public boolean select() {
 public void process(APDU apdu) throws ISOException, APDUException {
     byte[] buffer = apdu.getBuffer();
     byte ins = buffer[OFFSET_INS];
+    short lc_length;
 
     /* Ignore the APDU that selects this applet... */
     if (selectingApplet()) return;
@@ -134,21 +129,21 @@ public void process(APDU apdu) throws ISOException, APDUException {
 
                 
         // TODO: check P1 and P2 for validity
-        tInfo[0] = buffer[OFFSET_P1]; // terminal type
-        tInfo[1] = buffer[OFFSET_P2]; // terminal software version
+        tInfo[(short) 0] = buffer[OFFSET_P1]; // terminal type
+        tInfo[(short) 1] = buffer[OFFSET_P2]; // terminal software version
         
         // read the terminal ID into the apdu buffer
-        short lc_length = apdu.setIncomingAndReceive();
+        lc_length = apdu.setIncomingAndReceive();
         if (lc_length < (byte) 4) {
             ISOException.throwIt((short) (SW_WRONG_LENGTH | 4));
         }
         
         buffer = apdu.getBuffer();
 
-        tInfo[2] = buffer[(byte) 0];
-        tInfo[3] = buffer[(byte) 1]; 
-        tInfo[4] = buffer[(byte) 2]; 
-        tInfo[5] = buffer[(byte) 3]; 
+        tInfo[(short) 2] = buffer[(byte) 0];
+        tInfo[(short) 3] = buffer[(byte) 1]; 
+        tInfo[(short) 4] = buffer[(byte) 2]; 
+        tInfo[(short) 5] = buffer[(byte) 3]; 
 
         read(apdu, buffer);
         break;
@@ -165,31 +160,42 @@ public void process(APDU apdu) throws ISOException, APDUException {
         //revoke
         break;
     case 0x50:
-        //personalise
+        /*
+         * PERSONALISE instruction:
+         * 
+         * Note: every EC key is 201 bits and every AES key is 128 bits,
+         *
+         * INS: 0x50
+         * P1: Disable Personalisation after update
+         * P2: Terminal Software Version 
+         * Lc: 201 (bytes)
+         * Data:
+         *      25 bytes pukTMan
+         *      25 bytes pukTChar
+         *      25 bytes pukTCons
+         *      25 bytes pukc
+         *      25 bytes prkc
+         *      25 bytes purkc
+         *      25 bytes puks
+         *      20 bytes CCert
+         *      6 bytes of pin
+         */
+        if (manageable) {
+            manageable = (buffer[OFFSET_P1] & 0x01) == 0x01;
+            tInfo[(short) 1] = buffer[OFFSET_P2];
+
+            lc_length = apdu.setIncomingAndReceive();
+            if (lc_length < (byte) 201) {
+                ISOException.throwIt((short) (SW_WRONG_LENGTH | 201));
+            }
+         
+            // Configuration is done in the specialised function:
+            personalise(apdu, buffer);      
+        }
+
         break;
     case 0x60:
         //revoke
-        break;
-    case 0x70:
-        /*
-         * PERSONALISE instruction:
-         * INS: 0x70
-         * P1: Terminal Software Version 
-         * P2: 
-         * Lc: 
-         * Data:
-         *      
-         *
-         */
-         break;
-    case 0x80:
-        //rekey
-        break;
-    case 0x90:
-        //personalise
-        break;
-    case 0xa0:
-        //rekey
         break;
     case 0xf0:
         //reset (connection)
@@ -215,7 +221,7 @@ public void process(APDU apdu) throws ISOException, APDUException {
         // set the data transfer direction to outbound and to obtain the expected length of response
         short expectedLength = apdu.setOutgoing();
         
-        if (expectedLength < 6) ISOException.throwIt((short) (SW_WRONG_LENGTH | 6));
+        if (expectedLength < (short) 6) ISOException.throwIt((short) (SW_WRONG_LENGTH | 6));
         
         /*
          * Return answer with some general data about the card:
@@ -238,36 +244,33 @@ public void process(APDU apdu) throws ISOException, APDUException {
         apdu.sendBytes((short) 0, (short) 5);
     }
 
-/*
-    private void personalise(byte[] buffer) {
+    /**
+     * Does the personalisation phase of the card. 
+     *
+     * Assumes that it was checked whether personalisation was allowed.
+     * Assumes that the apdu buffer was the correct length.
+     */
+    private void personalise(APDU apdu, byte[] buffer) {
+        buffer = apdu.getBuffer();
         
+        pukTMan.setW(buffer, PUKTMAN_PERS_OFFSET, EC_KEY_LENGTH);
+        pukTChar.setW(buffer, PUKTCHAR_PERS_OFFSET, EC_KEY_LENGTH);
+        pukTCons.setW(buffer, PUKTCONS_PERS_OFFSET, EC_KEY_LENGTH);
+        pukc.setW(buffer, PUKC_PERS_OFFSET, EC_KEY_LENGTH);
+        prkc.setS(buffer, PRKC_PERS_OFFSET, EC_KEY_LENGTH);
+        purkc.setW(buffer, PURKC_PERS_OFFSET, EC_KEY_LENGTH);
+        puks.setW(buffer, PUKS_PERS_OFFSET, EC_KEY_LENGTH);
+
+        Signature s = Signature.getInstance(Signature.ALG_ECDSA_SHA, false);
+        s.init(puks, Signature.MODE_VERIFY);
+        
+        if (true /* TODO: verify card ID and type card in CCert */) {
+            for (short i = 0; i < EC_CERT_LENGTH; i++) {
+                CCert[i] = buffer[(short) CCERT_PERS_OFFSET + i];
+            }
+        }
+
+        pin.update(buffer, PIN_PERS_OFFSET, PIN_SIZE);
 
     } 
- // keys
-private ECPublicKey pukTMan;    // public key TMan
-private ECPublicKey pukTChar;   // public key TChar
-private ECPublicKey pukTCons;   // public key TCons
-private ECPublicKey pukc;       // public key Card
-private ECPrivateKey prkc;       // private key Card
-private ECPrivateKey prrkc;      // private rekey Card
-private ECPublicKey puks;       // Server certificate verification key
-private byte[] CCert;      // Server certificate verification key
-
-private AESKey skey;
-
-private OwnerPIN pin = OwnerPIN(PIN_TRY_LIMIT, PIN_SIZE);
-
-// Determines whether the card is in personalisation phase
-private boolean managable = true;
-
-private byte[] tInfo; // contains: 0: type; 1: software version; 2,3,4,5: terminal ID
-private byte[] cID; // 4 bytes of card ID
-
-private short petrolCredits;
-
-private Object[] transactionLog;
-private byte[] lastKnownTime;
-
- */  
-     
 }
