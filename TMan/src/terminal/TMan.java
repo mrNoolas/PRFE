@@ -1,5 +1,7 @@
 package terminal;
 
+import javacard.security.*;
+import javacard.framework.*;
 import javacard.framework.AID;
 import javacard.framework.ISO7816;
 
@@ -76,7 +78,7 @@ public class TMan extends JPanel implements ActionListener {
     CardChannel applet;
 
     // keys
-    private ECPrivateKey prTMan;     // private key TMan
+    private ECPrivateKey prkTMan;     // private key TMan
     private ECPublicKey pukTMan;     // public key TChar
     private ECPublicKey pukTChar;    // public key TChar
     private ECPublicKey pukTCons;    // public key TCons
@@ -101,20 +103,20 @@ public class TMan extends JPanel implements ActionListener {
     private byte[] status;
 
     public TMan(JFrame parent) {
-        skey = KeyBuilder.buildKey(TYPE_AES_TRANSIENT_DESELECT, LENGTH_AES_128, true);
+        skey = (AESKey) KeyBuilder.buildKey(KeyBuilder.TYPE_AES_TRANSIENT_DESELECT, KeyBuilder.LENGTH_AES_128, true);
         status = JCSystem.makeTransientByteArray((short) 1, JCSystem.CLEAR_ON_RESET);
         status[0] = 0x00; // unitialised
 
-        prkTMan  = KeyBuilder.buildKey(TYPE_EC_F2M_PRIVATE, LENGTH_F2M_193, true); // private key TMan
-        pukTMan  = KeyBuilder.buildKey(TYPE_EC_F2M_PUBLIC, LENGTH_F2M_193, true); // public key TMan
-        pukTChar = KeyBuilder.buildKey(TYPE_EC_F2M_PUBLIC, LENGTH_F2M_193, true); // public key TChar
-        pukTCons = KeyBuilder.buildKey(TYPE_EC_F2M_PUBLIC, LENGTH_F2M_193, true); // public key TCons
-        prkc     = KeyBuilder.buildKey(TYPE_EC_F2M_PRIVATE, LENGTH_F2M_193, true);       // private key Card
-        pukc     = KeyBuilder.buildKey(TYPE_EC_F2M_PUBLIC, LENGTH_F2M_193, true);       // public key Card
-        prrkt    = KeyBuilder.buildKey(TYPE_EC_F2M_PRIVATE, LENGTH_F2M_193, true);      // private rekey Terminal
-        prrkc    = KeyBuilder.buildKey(TYPE_EC_F2M_PRIVATE, LENGTH_F2M_193, true);      // private rekey Card
-        puks     = KeyBuilder.buildKey(TYPE_EC_F2M_PUBLIC, LENGTH_F2M_193, true);       // Server certificate verification key
-        CCert;      // Server certificate verification key
+        prkTMan  = (ECPrivateKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_F2M_PRIVATE, KeyBuilder.LENGTH_EC_F2M_193, true); // private key TMan
+        pukTMan  = (ECPublicKey)  KeyBuilder.buildKey(KeyBuilder.TYPE_EC_F2M_PUBLIC,  KeyBuilder.LENGTH_EC_F2M_193, true); // public key TMan
+        pukTChar = (ECPublicKey)  KeyBuilder.buildKey(KeyBuilder.TYPE_EC_F2M_PUBLIC,  KeyBuilder.LENGTH_EC_F2M_193, true); // public key TChar
+        pukTCons = (ECPublicKey)  KeyBuilder.buildKey(KeyBuilder.TYPE_EC_F2M_PUBLIC,  KeyBuilder.LENGTH_EC_F2M_193, true); // public key TCons
+        prkc     = (ECPrivateKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_F2M_PRIVATE, KeyBuilder.LENGTH_EC_F2M_193, true); // private key Card
+        pukc     = (ECPublicKey)  KeyBuilder.buildKey(KeyBuilder.TYPE_EC_F2M_PUBLIC,  KeyBuilder.LENGTH_EC_F2M_193, true); // public key Card
+        prrkt    = (ECPrivateKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_F2M_PRIVATE, KeyBuilder.LENGTH_EC_F2M_193, true); // private rekey Terminal
+        prrkc    = (ECPrivateKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_F2M_PRIVATE, KeyBuilder.LENGTH_EC_F2M_193, true); // private rekey Card
+        puks     = (ECPublicKey)  KeyBuilder.buildKey(KeyBuilder.TYPE_EC_F2M_PUBLIC,  KeyBuilder.LENGTH_EC_F2M_193, true); // Server certificate verification key
+        CCert    = null;      // Server certificate verification key
 
 
 
@@ -122,10 +124,10 @@ public class TMan extends JPanel implements ActionListener {
         lastOp = JCSystem.makeTransientByteArray((short) 1, JCSystem.CLEAR_ON_RESET);
         lastKeyWasDigit = JCSystem.makeTransientBooleanArray((short) 1, JCSystem.CLEAR_ON_RESET);
         m = 0;*/
-        register();
+        //register();
 
         // original code: ===========================================================================
-        /simulatorInterface = new JavaxSmartCardInterface(); // SIM
+        //simulatorInterface = new JavaxSmartCardInterface(); // SIM
         buildGUI(parent);
         setEnabled(false);
         (new SimulatedCardThread()).start();
@@ -232,26 +234,31 @@ public class TMan extends JPanel implements ActionListener {
     public boolean disableManageable(){
       //set managable on card to false
       //return true on succes
+      return true;
     }
 
     public boolean getManageable(){
       //get the managable status from card and return this
+      return true;
     }
 
     public String getInfo(){
       //get version number
+      return "0.0.1";
     }
 
     public boolean updateSoftware(){
       //do we even want to program this or just as a placeholder?
+      return true;
     }
 
     public String getOwner(){
       //get owner name
+      return "nobody";
     }
 
     public boolean setOwner(String name){
-      if(!getManagable()){
+      if(!getManageable()){
         return false;
       } else {
         // set owner
@@ -261,7 +268,7 @@ public class TMan extends JPanel implements ActionListener {
     }
 
     public boolean setKey(int keyNumber, String key) {
-      if(!getManagable()){
+      if(!getManageable()){
         return false;
       } else {
         // set one key
@@ -271,7 +278,7 @@ public class TMan extends JPanel implements ActionListener {
     }
 
     public boolean setKeys(String[] keys) {
-      if(!getManagable()){
+      if(!getManageable()){
         return false;
       } else {
         // set all keys at once
@@ -283,15 +290,18 @@ public class TMan extends JPanel implements ActionListener {
     public boolean setPetrolCredits(int PC) {
       // change pc on card to PC
       // return true on succes
+      return true;
     }
 
     public int getPetrolCredits() {
       // get the pc that are on the card
       // return an int
+      return 0;
     }
 
     public boolean rekeyCard(){
       // do some magic to rekey the card
+      return true;
     }
 
     class SimulatedCardThread extends Thread {
