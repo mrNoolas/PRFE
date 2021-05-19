@@ -53,8 +53,13 @@ import applet.CardApplet;
  */
 public class TCons extends JPanel implements ActionListener {
 
-    private byte[] ID;                    // ID of the terminal
-    private byte[] Sver;                  // Software version of the Terminal
+    private byte[] tID;                    // ID of the terminal
+    private byte[] Sver;                   // Software version of the Terminal
+
+    private byte TERMINAL_SOFTWARE_VERSION;
+
+    private static final byte TERMINAL_TYPE = (byte) 0x3;
+
 
     //keys
     private ECPublicKey pukc;             // public key Card
@@ -64,6 +69,13 @@ public class TCons extends JPanel implements ActionListener {
     private byte[] TCert;                 // Terminal certificate signed with prks
 
     private AESKey skey;                  // Session key
+
+    //Instruction bytes
+    private static final byte PRFE_CLA = (byte) 0xB0;
+    private static final byte READ_INS = (byte) 0x00;
+    private static final byte AUTH_INS = (byte) 0x10;
+    private static final byte CONS_INS = (byte) 0x30;
+    private static final byte REV_INS  = (byte) 0x40;
 
     //private JavaxSmartCardInterface simulatorInterface; // SIM
 
@@ -92,13 +104,15 @@ public class TCons extends JPanel implements ActionListener {
     public TCons(JFrame parent) {
         skey      = (AESKey) KeyBuilder.buildKey(KeyBuilder.TYPE_AES_TRANSIENT_DESELECT, KeyBuilder.LENGTH_AES_128, true);   // session key
 
-        pukc      = (ECPublicKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_F2M_PUBLIC, KeyBuilder.LENGTH_F2M_193, true);         // public key Card
-        prkTCons  = (ECPrivateKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_F2M_PRIVATE, KeyBuilder.LENGTH_F2M_193, true);        // private key TCons
-        purkTCons = (ECPublicKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_F2M_PUBLIC, KeyBuilder.LENGTH_F2M_193, true);         // public rekey TCons
-        puks      = (ECPublicKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_F2M_PUBLIC, KeyBuilder.LENGTH_F2M_193, true);         // certificate verification key
+        pukc      = (ECPublicKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_F2M_PUBLIC, KeyBuilder.LENGTH_EC_F2M_193, true);         // public key Card
+        prkTCons  = (ECPrivateKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_F2M_PRIVATE, KeyBuilder.LENGTH_EC_F2M_193, true);        // private key TCons
+        purkTCons = (ECPublicKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_F2M_PUBLIC, KeyBuilder.LENGTH_EC_F2M_193, true);         // public rekey TCons
+        puks      = (ECPublicKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_F2M_PUBLIC, KeyBuilder.LENGTH_EC_F2M_193, true);         // certificate verification key
 
-        TCert;                                                                             // Terminal certificate containing
+        TCert = null;                                                                      // Terminal certificate containing
                                                                                            // ID, type of device and expiry date
+        tID = new byte[4];
+
 
         //simulatorInterface = new JavaxSmartCardInterface(); // SIM
         buildGUI(parent);
@@ -109,11 +123,17 @@ public class TCons extends JPanel implements ActionListener {
     //functions
 
     public void readCard(CardApplet card){                                                 //default method, read information on card
-        //send APDU to card containing the INS byte 0x00?
-        //card sends back apdu with the data?
+        //construct a commandAPDU with the INS byte for read and the terminal info
+        //documentation states the CommandAPDU can be constructed using int values for the header bytes
+        CommandAPDU readCommand = new CommandAPDU((int)PRFE_CLA, (int) READ_INS, (int)TERMINAL_TYPE, (int)TERMINAL_SOFTWARE_VERSION);
+        //card sends back apdu with the data after transmitting the commandAPDU to the card
+        ResponseAPDU response = card.transmit(readCommand);
         //process the response apdu and display the information on the terminal?
+        byte[] responseBytes = response.getBytes();
+        //setText(response);
+        //alternatively maybe use the setText(response) to extract the data from the apdu and display on terminal?
     };
-                                                                                                    //(id, software version, petrol quota on card)
+
 
     public void authenticateCardAndBuyer(CardApplet card){                                                         //authenticate card and buyer before we perform any transactions
         //authenticate card
@@ -132,11 +152,20 @@ public class TCons extends JPanel implements ActionListener {
     };
 
 
-    void setMaxGas(CardApplet card);                                                                             //set the max amount of gas available to the buyer based on the quota on card (a short?)
+    void setMaxGas(CardApplet card){
+        //read balance from the card
+        //
+    };                                                                             //set the max amount of gas available to the buyer based on the quota on card (a short?)
 
     short getGasUsed();                                                                                          //return the amount of gas dispensed
 
-    void sign(byte[] data, byte[] key);
+    public byte[] sign(byte[] data, byte[] key){
+        Signature sign = Signature.getInstance("");                               //determine signing algorithm
+        sign.initSign(key);
+        sign.update(data);
+        byte[] signature = sign.sign();
+        return signature;
+    };
 
     public byte[] hash(byte[] data){
         //create message digest using a certain hash algorithm
