@@ -31,9 +31,9 @@ import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JTextField;
 
-// imports for using JCardSim 
-//import com.licel.jcardsim.io.JavaxSmartCardInterface; 
-//import com.licel.jcardsim.smartcardio.JCardSimProvider; 
+// imports for using JCardSim
+//import com.licel.jcardsim.io.JavaxSmartCardInterface;
+//import com.licel.jcardsim.smartcardio.JCardSimProvider;
 import com.licel.jcardsim.smartcardio.CardTerminalSimulator;
 import com.licel.jcardsim.smartcardio.CardSimulator;
 
@@ -43,21 +43,21 @@ import applet.CardApplet;
  * Sample terminal for the Calculator applet.
  *
  * Code added for hooking in the simulator is marked with SIM
- * 
+ *
  * @author Martijno
  * @author woj
  * @author Pim Vullers
  * @author erikpoll
- * 
+ *
  */
 public class TChar extends JPanel implements ActionListener {
-	
+
 	// keys
 	private ECPublicKey pukc; // public key Card
 	private ECPrivateKey prkTChar; // private key TChar
 	private ECPublicKey purkTChar; // public rekey key TChar
-	private ECPublicKey puks; // certificate verification key 
-	private byte[] TCert; // Terminal certificate 
+	private ECPublicKey puks; // certificate verification key
+	private byte[] TCert; // Terminal certificate
 
 
     //private JavaxSmartCardInterface simulatorInterface; // SIM
@@ -78,7 +78,7 @@ public class TChar extends JPanel implements ActionListener {
 
     static final CommandAPDU SELECT_APDU = new CommandAPDU(
     		(byte) 0x00, (byte) 0xA4, (byte) 0x04, (byte) 0x00, CALC_APPLET_AID);
-    
+
     JTextField display;
     JPanel keypad;
 
@@ -89,65 +89,65 @@ public class TChar extends JPanel implements ActionListener {
         buildGUI(parent);
         setEnabled(false);
         (new SimulatedCardThread()).start();
-		
-		skey = (AESKey) KeyBuilder.buildKey(KeyBuilder.TYPE_AES_TRANSIENT_DESELECT, KeyBuilder.LENGTH_AES_128,true);
-		pukc = KeyBuilder.buildKey(TYPE_EC_F2M_PUBLIC, LENGTH_F2M_193, true);
-		prkTChar = KeyBuilder.buildKey(TYPE_EC_F2M_PRIVATE, LENGTH_F2M_193, true);
-		purkTChar = KeyBuilder.buildKey(TYPE_EC_F2M_PUBLIC, LENGTH_F2M_193, true);
-		puks = KeyBuilder.buildKey(TYPE_EC_F2M_PUBLIC, LENGTH_F2M_193, true);
-		TCert;
+
+		skey      = (AESKey)       KeyBuilder.buildKey(KeyBuilder.TYPE_AES_TRANSIENT_DESELECT, KeyBuilder.LENGTH_AES_128,true);
+		pukc      = (ECPublicKey)  KeyBuilder.buildKey(KeyBuilder.TYPE_EC_F2M_PUBLIC,  KeyBuilder.LENGTH_F2M_193, true);
+		prkTChar  = (ECPrivateKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_F2M_PRIVATE, KeyBuilder.LENGTH_F2M_193, true);
+		purkTChar = (ECPublicKey)  KeyBuilder.buildKey(KeyBuilder.TYPE_EC_F2M_PUBLIC,  KeyBuilder.LENGTH_F2M_193, true);
+		puks      = (ECPublicKey)  KeyBuilder.buildKey(KeyBuilder.TYPE_EC_F2M_PUBLIC,  KeyBuilder.LENGTH_F2M_193, true);
+		TCert     = null;
     }
-	
-	public void readCard(CardApplet card) {  
+
+	public void readCard(CardApplet card) {
 		// This function reads the information from the presented card given by parameter card
 		// Send APDU to card
 		// Receive APDU from card containing a response
 		// Process response
 		// Show response on terminal
 	}
-	
+
 	public void authenticateCardAndBuyer(CardApplet card) {
 		// This function ensures that the card and the buyer are properly authenticated before starting a transaction
 		// Authenticate the card
-		// User enters PIN 
-		// Terminal accepts PIN: user is authenticated 
-		// Terminal declines PIN: user is not authenticated 
+		// User enters PIN
+		// Terminal accepts PIN: user is authenticated
+		// Terminal declines PIN: user is not authenticated
 	}
-	
+
 	public byte[] hash(byte[] data) {
 		// Hash the message using hash function
 		MessageDigest md = MessageDigest.getInstance("");
 		md.update(data);
-		
+
 		byte[] hash = md.digest();
 		return hash;
 	}
-	
+
 	public boolean verify(byte[] data, byte[] key) {
 		// Verify if a given signature is correct
 		// If correct: output true
 		// If incorrect: output false
 	}
-	
+
 	public byte[] sign(byte[] data, byte[] key) {
 		// Sign a given message to ensure integrity
-		
+
 	}
-	
+
 	public byte[] mac(byte[] data) {
 		// Returns the MAC of the data
 		Mac mac = Mac.getInstance("");
 		mac.init(skey);
-		
+
 		byte[] macResult = mac.doFinal(data);
 		return macResult;
 	}
-	
-	public void updateQuota(CardApplet card, int amount) { 
+
+	public void updateQuota(CardApplet card, int amount) {
 		// Updates the quota on the card
-		// Requires authenticateCardAndBuyer() 
-		// new_amount = old_amount + quota 
-		
+		// Requires authenticateCardAndBuyer()
+		// new_amount = old_amount + quota
+
 	}
 
     void buildGUI(JFrame parent) {
@@ -261,7 +261,7 @@ public class TChar extends JPanel implements ActionListener {
     	    		System.err.println("No terminals with a card found.");
     	    		return;
     	    	}
-    	    	
+
     	    	while (true) {
     	    		try {
     	    			for(CardTerminal c : cs) {
@@ -333,10 +333,10 @@ public class TChar extends JPanel implements ActionListener {
 
           // Insert Card into "My terminal 1"
           simulator.assignToTerminal(terminal1);
-                
+
           try {
             Card card = terminal1.connect("*");
-    	    	
+
     	    applet = card.getBasicChannel();
     	    ResponseAPDU resp = applet.transmit(SELECT_APDU);
     	    if (resp.getSW() != 0x9000) {
