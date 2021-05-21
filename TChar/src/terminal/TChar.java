@@ -55,6 +55,11 @@ import applet.CardApplet;
  *
  */
 public class TChar extends JPanel implements ActionListener {
+	
+	private byte[] tID;
+	private byte[] Sver;
+	private byte TERMINAL_SOFTWARE_VERSION;
+	private static final byte TERMINAL_TYPE = (byte) 0x2; 
 
 	// keys
 	private ECPublicKey pukc; // public key Card
@@ -67,7 +72,7 @@ public class TChar extends JPanel implements ActionListener {
     private static final byte PRFE_CLA = (byte) 0xB0;
     private static final byte READ_INS = (byte) 0x00;
     private static final byte AUTH_INS = (byte) 0x10;
-    private static final byte CONS_INS = (byte) 0x30;
+    private static final byte CHAR_INS = (byte) 0x20;
     private static final byte REV_INS  = (byte) 0x40;
 
 
