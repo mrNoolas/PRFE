@@ -31,9 +31,13 @@ import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JTextField;
 
+
 // imports for using JCardSim
 //import com.licel.jcardsim.io.JavaxSmartCardInterface;
 //import com.licel.jcardsim.smartcardio.JCardSimProvider;
+
+import javax.crypto.*;
+
 import com.licel.jcardsim.smartcardio.CardTerminalSimulator;
 import com.licel.jcardsim.smartcardio.CardSimulator;
 
@@ -90,12 +94,17 @@ public class TChar extends JPanel implements ActionListener {
         setEnabled(false);
         (new SimulatedCardThread()).start();
 
+
 		skey      = (AESKey)       KeyBuilder.buildKey(KeyBuilder.TYPE_AES_TRANSIENT_DESELECT, KeyBuilder.LENGTH_AES_128,true);
 		pukc      = (ECPublicKey)  KeyBuilder.buildKey(KeyBuilder.TYPE_EC_F2M_PUBLIC,  KeyBuilder.LENGTH_F2M_193, true);
 		prkTChar  = (ECPrivateKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_F2M_PRIVATE, KeyBuilder.LENGTH_F2M_193, true);
 		purkTChar = (ECPublicKey)  KeyBuilder.buildKey(KeyBuilder.TYPE_EC_F2M_PUBLIC,  KeyBuilder.LENGTH_F2M_193, true);
 		puks      = (ECPublicKey)  KeyBuilder.buildKey(KeyBuilder.TYPE_EC_F2M_PUBLIC,  KeyBuilder.LENGTH_F2M_193, true);
 		TCert     = null;
+
+		
+		
+
     }
 
 	public void readCard(CardApplet card) {
@@ -104,6 +113,29 @@ public class TChar extends JPanel implements ActionListener {
 		// Receive APDU from card containing a response
 		// Process response
 		// Show response on terminal
+		
+		/*
+		apdu.setOutgoingLength((byte) 6);
+		
+		buffer[(byte) 0] = (byte) TERMINAL_TYPE;
+        buffer[(byte) 1] = (byte) TERMINAL_SOFTWARE_VERSION; 
+        buffer[(byte) 2] = (byte) tID[(byte) 0];
+        buffer[(byte) 3] = (byte) tID[(byte) 1];
+        buffer[(byte) 4] = (byte) tID[(byte) 2];
+        buffer[(byte) 5] = (byte) tID[(byte) 3];
+		
+		apdu.sendBytes((short) 0, (short) 5);
+		
+		byte lc_length = apdu.getIncomingLength();
+		apdu.setIncomingAndReceive();
+        
+		cInfo[0] = buffer[(byte) 0]; // Card type
+		cInfo[1] = buffer[(byte) 1]; // Card software version
+		cInfo[2] = buffer[(byte) 2]; // Card ID 
+		cInfo[3] = buffer[(byte) 3]; 
+		cInfo[4] = buffer[(byte) 4];
+		cInfo[5] = buffer[(byte) 5]; 
+		*/
 	}
 
 	public void authenticateCardAndBuyer(CardApplet card) {
