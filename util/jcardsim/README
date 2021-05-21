@@ -5,4 +5,4 @@ jcardsim is an emulator which allows you to run javacard applications without th
 jcardsim works based on a config file, an example is provided in the file 'jcardsim.cfg'. This file loads the calculator app. The provided APDU file (calc.apdu) provides the APDU's which make the calculator calculate 4x2=8. To view the structure of APDU's and the example file, view calc.apdu.
 
 To run this example, type in the root directory:
-java   -classpath util/jcardsim/jcardsim-2.2.1-all.jar:AssignmentApplet/bin com.licel.jcardsim.utils.APDUScriptTool util/jcardsim/jcardsim.cfg util/jcardsim/calc.apdu
+java   -classpath util/jcardsim/jcardsim-2.2.1-all.jar:CalcApplet/bin com.licel.jcardsim.utils.APDUScriptTool util/jcardsim/jcardsim.cfg util/jcardsim/calc.apdu

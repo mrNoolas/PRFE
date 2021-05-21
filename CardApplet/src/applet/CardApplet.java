@@ -149,6 +149,7 @@ public void process(APDU apdu) throws ISOException, APDUException {
         break;
     case 0x10:
         //authenticate()
+
         break;
     case 0x20:
         //charge
@@ -162,8 +163,12 @@ public void process(APDU apdu) throws ISOException, APDUException {
     case 0x50:
         /*
          * PERSONALISE instruction:
+         *
+         * Only allowed if terminal is authenticated as TMan, and manageable is still True.
          * 
          * Note: every EC key is 201 bits and every AES key is 128 bits,
+         *
+         * TODO: encrypt data for confidentiality? And send MAC? --> Assume TMan is in a secure environment so encryption not necessary?
          *
          * INS: 0x50
          * P1: Disable Personalisation after update
@@ -180,7 +185,7 @@ public void process(APDU apdu) throws ISOException, APDUException {
          *      20 bytes CCert
          *      6 bytes of pin
          */
-        if (manageable) {
+        if (manageable && (status[0] & 0xff) == 0x11) {
             manageable = (buffer[OFFSET_P1] & 0x01) == 0x01;
             tInfo[(short) 1] = buffer[OFFSET_P2];
 
@@ -217,6 +222,11 @@ public void process(APDU apdu) throws ISOException, APDUException {
         */
     }
 
+    /**
+     * Read some general data from the card.
+     *
+     * Sends card type; card software version; and card ID to the terminal.
+     */ 
     private void read(APDU apdu, byte[] buffer) {
         // set the data transfer direction to outbound and to obtain the expected length of response
         short expectedLength = apdu.setOutgoing();
