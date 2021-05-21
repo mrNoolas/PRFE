@@ -1,0 +1,1 @@
+java -cp util/jcardsim/jcardsim-2.2.1-all.jar:CardApplet/bin/applet com.licel.jcardsim.utils.APDUScriptTool util/jcardsim/jcardsim.cfg test.apdu
