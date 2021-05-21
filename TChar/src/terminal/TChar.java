@@ -62,6 +62,13 @@ public class TChar extends JPanel implements ActionListener {
 	private ECPublicKey purkTChar; // public rekey key TChar
 	private ECPublicKey puks; // certificate verification key
 	private byte[] TCert; // Terminal certificate
+	
+	//Instruction bytes
+    private static final byte PRFE_CLA = (byte) 0xB0;
+    private static final byte READ_INS = (byte) 0x00;
+    private static final byte AUTH_INS = (byte) 0x10;
+    private static final byte CONS_INS = (byte) 0x30;
+    private static final byte REV_INS  = (byte) 0x40;
 
 
     //private JavaxSmartCardInterface simulatorInterface; // SIM
@@ -114,28 +121,11 @@ public class TChar extends JPanel implements ActionListener {
 		// Process response
 		// Show response on terminal
 		
-		/*
-		apdu.setOutgoingLength((byte) 6);
+		CommandAPDU readCommand = new CommandAPDU((int)PRFE_CLA, (int) READ_INS, (int)TERMINAL_TYPE, (int)TERMINAL_SOFTWARE_VERSION);
 		
-		buffer[(byte) 0] = (byte) TERMINAL_TYPE;
-        buffer[(byte) 1] = (byte) TERMINAL_SOFTWARE_VERSION; 
-        buffer[(byte) 2] = (byte) tID[(byte) 0];
-        buffer[(byte) 3] = (byte) tID[(byte) 1];
-        buffer[(byte) 4] = (byte) tID[(byte) 2];
-        buffer[(byte) 5] = (byte) tID[(byte) 3];
+		ResponseAPDU response = card.transmit(readCommand);
 		
-		apdu.sendBytes((short) 0, (short) 5);
-		
-		byte lc_length = apdu.getIncomingLength();
-		apdu.setIncomingAndReceive();
-        
-		cInfo[0] = buffer[(byte) 0]; // Card type
-		cInfo[1] = buffer[(byte) 1]; // Card software version
-		cInfo[2] = buffer[(byte) 2]; // Card ID 
-		cInfo[3] = buffer[(byte) 3]; 
-		cInfo[4] = buffer[(byte) 4];
-		cInfo[5] = buffer[(byte) 5]; 
-		*/
+		byte[] responseBytes = response.getBytes();
 	}
 
 	public void authenticateCardAndBuyer(CardApplet card) {
