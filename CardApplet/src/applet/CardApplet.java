@@ -14,6 +14,10 @@ private static final byte PIN_SIZE = (byte) 6;
 
 private static final short MAX_PETROL_CREDITS = (short) 10000;
 
+
+// Response lenghts
+private static final short READ_RESP_LEN = 8;
+
 // keys
 private AESKey skey;
 
@@ -126,8 +130,6 @@ public void process(APDU apdu) throws ISOException, APDUException {
          * Data: 32 bits of Terminal ID (4 bytes)
          */
 
-
-                
         // TODO: check P1 and P2 for validity
         tInfo[(short) 0] = buffer[OFFSET_P1]; // terminal type
         tInfo[(short) 1] = buffer[OFFSET_P2]; // terminal software version
@@ -148,7 +150,11 @@ public void process(APDU apdu) throws ISOException, APDUException {
         read(apdu, buffer);
         break;
     case 0x10:
-        //authenticate()
+        /*
+         * Authenticate instruction
+         *
+         *
+         */
 
         break;
     case 0x20:
@@ -231,7 +237,7 @@ public void process(APDU apdu) throws ISOException, APDUException {
         // set the data transfer direction to outbound and to obtain the expected length of response
         short expectedLength = apdu.setOutgoing();
         
-        if (expectedLength < (short) 6) ISOException.throwIt((short) (SW_WRONG_LENGTH | 6));
+        if (expectedLength < (short) READ_RESP_LEN) ISOException.throwIt((short) (SW_WRONG_LENGTH | READ_RESP_LEN));
         
         /*
          * Return answer with some general data about the card:
@@ -242,7 +248,7 @@ public void process(APDU apdu) throws ISOException, APDUException {
          * Data: 16 bits of Card ID (2 bytes)
          */
 
-        apdu.setOutgoingLength((byte) 6);
+        apdu.setOutgoingLength((byte) READ_RESP_LEN);
         
         buffer[(byte) 0] = (byte) CARD_TYPE;
         buffer[(byte) 1] = (byte) CARD_SOFTWARE_VERSION; 
@@ -250,8 +256,10 @@ public void process(APDU apdu) throws ISOException, APDUException {
         buffer[(byte) 3] = (byte) cID[(byte) 1];
         buffer[(byte) 4] = (byte) cID[(byte) 2];
         buffer[(byte) 5] = (byte) cID[(byte) 3];
+        buffer[(byte) 6] = (byte) (petrolCredits & 0xff00);
+        buffer[(byte) 7] = (byte) (petrolCredits & 0x00ff);
         
-        apdu.sendBytes((short) 0, (short) 5);
+        apdu.sendBytes((short) 0, (short) READ_RESP_LEN);
     }
 
     /**
