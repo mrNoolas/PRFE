@@ -1,1 +1,0 @@
-java -classpath util/jcardsim/jcardsim-2.2.1-all.jar:CardApplet/bin com.licel.jcardsim.utils.APDUScriptTool util/jcardsim/jcardsim.cfg util/jcardsim/test.apdu
