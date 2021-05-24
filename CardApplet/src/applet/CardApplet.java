@@ -77,6 +77,7 @@ private byte[] lastKnownTime;
 // 0x01 terminal authenticated as TMan
 // 0x02 terminal authenticated as TChar
 // 0x03 terminal authenticated as TCons
+// 0x07 card has been revoked
 // 0xff authentication initiated, session key exchanged
 // User authentication is handled by the PIN class
 private byte[] status; 
@@ -172,7 +173,26 @@ public void process(APDU apdu) throws ISOException, APDUException {
         //consume
         break;
     case 0x40:
-        //revoke
+        /* REVOKE instruction: 
+		 * 
+		 * This instruction can be executed at any authenticated terminal.
+		 *
+		 * INS: 0x40 
+		 * P1: Terminal Software Version
+		 * P2: Signing certificate
+		 * Lc: 
+		 * Data: 
+		 *
+		 
+		if (((status[(short) 0] & 0xff) == 0x01) || ((status[(short) 0] & 0xff) == 0x02) || ((status[(short) 0] & 0xff) == 0x03) ) {
+			tInfo[(short) 1] = buffer[OFFSET_P1];
+			
+			// TODO: check validity of certificate
+			if (true) {
+				revoke(apdu, buffer);
+			}	
+		} */
+		
         break;
     case 0x50:
         /*
@@ -399,5 +419,17 @@ public void process(APDU apdu) throws ISOException, APDUException {
 
         pin.update(buffer, PIN_PERS_OFFSET, PIN_SIZE);
 
-    } 
+    }
+
+	/**
+	 * Revokes the validity of the card.
+	 * 
+	 * Assumes that the terminal and card are authenticated.
+	 * Assumes that the validity of the revoking instruction certificate has been checked.
+	 *
+	private void revoke(APDU apdu, byte[] buffer) {
+		buffer = apdu.getBuffer();
+		
+		status[0] = 0x07; // Card status is now revoked
+	} */
 }
