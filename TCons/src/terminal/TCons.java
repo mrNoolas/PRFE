@@ -122,18 +122,35 @@ public class TCons extends JPanel implements ActionListener {
 
     //functions
 
-    public void readCard(CardApplet card){                                                 //default method, read information on card
+    public void readCard(){                                                 //default method, read information on card
         //construct a commandAPDU with the INS byte for read and the terminal info
-        //documentation states the CommandAPDU can be constructed using int values for the header bytes
-        CommandAPDU readCommand = new CommandAPDU((int)PRFE_CLA, (int) READ_INS, (int)TERMINAL_TYPE, (int)TERMINAL_SOFTWARE_VERSION);
+        CommandAPDU readCommand = new CommandAPDU((byte) PRFE_CLA, (byte) READ_INS, (byte)TERMINAL_TYPE, (byte)TERMINAL_SOFTWARE_VERSION);
         //card sends back apdu with the data after transmitting the commandAPDU to the card
-        ResponseAPDU response = card.transmit(readCommand);
+        ResponseAPDU response = applet.transmit(readCommand);
         //process the response apdu and display the information on the terminal?
         byte[] responseBytes = response.getBytes();
+        byte[] data = response.getData(); //data for read command is the card id and the petrol credits?
+        //parseData(byte[] data)?
         //setText(response);
         //alternatively maybe use the setText(response) to extract the data from the apdu and display on terminal?
     };
 
+    public byte[] getCardData(ResponseAPDU response){
+        byte[] data = response.getData();
+        return data;
+    }
+
+    public byte[] getCardID(byte[] data){
+
+        return data;
+    }
+
+    public int getPetrolCredit(byte[] data){
+        //get petrol credit from the card
+        //
+        //
+        return 0;
+    };
 
     public void authenticateCardAndBuyer(CardApplet card){                                                         //authenticate card and buyer before we perform any transactions
         //authenticate card
@@ -143,17 +160,22 @@ public class TCons extends JPanel implements ActionListener {
         //else it returns number of tries left for the pin, if this is 0, the card is blocked: exit
     };
 
-    public void consumeQuota(CardApplet card, int amount){                                                        //use an amount of petrol quota on the card
+    public void consumeQuota(int amount, int balance){                                                        //use an amount of petrol quota on the card
         //amount = entered by the buyer
         //card has quota balance
+        if (balance - amount < 0){
+
+        }
         //if quota on card - amount < 0 : exit
         //else
 
     };
 
 
-    void setMaxGas(CardApplet card){
+    void setMaxGas(){
         //read balance from the card
+        int balance = getPetrolCredit();
+        //
         //
     };                                                                             //set the max amount of gas available to the buyer based on the quota on card (a short?)
 
