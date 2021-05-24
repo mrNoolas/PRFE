@@ -22,6 +22,7 @@ private static final short AUTH2_INC_LEN = 200; // TODO update this
 
 // Response lenghts
 private static final short READ_RESP_LEN = 8;
+private static final short AUTH1_RESP_LEN = 44;
 
 // keys
 private AESKey skey;
@@ -49,23 +50,38 @@ private static final short PIN_PERS_OFFSET = 195;
 
 // Other offsets
 private static final short SK_EXCH_PUBLIC_OFFSET = 4;
+private static final short SK_EXCH_SIG1_OFFSET = SK_EXCH_PUBLIC OFFSET + AES_KEY_LENGTH;
 
 // some lengths in bytes
 private static final short EC_KEY_LENGTH = 25;
 private static final short EC_CERT_LENGTH = 20;
 private static final short AES_KEY_LENGTH = 16;
+private static final short SIGN_LENGTH = 16;
+private static final short NONCE_LENGTH = 8;
 
 private KeyAgreement ECExch;
 private Cipher AESCipher;
+private Signature signature;
+private RandomData random;
 
 // Determines whether the card is in personalisation phase
 private boolean manageable = true;
+
+// Terminal information
+private static final byte TERM_TYPE_CARD = 0x00;
+private static final byte TERM_TYPE_TMAN = 0x01;
+private static final byte TERM_TYPE_TCHAR = 0x02;
+private static final byte TERM_TYPE_TCONS = 0x03;
 
 private byte[] tInfo; // contains: 0: type; 1: software version; 2,3,4,5: terminal ID
 private byte[] cID; // 4 bytes of card ID
 private OwnerPIN pin;
 
+private byte[] nonceC;
+private byte[] nonceT;
+
 private byte[] keyExchBuffer;
+private byte[] sigBuffer;
 
 private short petrolCredits;
 
@@ -84,8 +100,13 @@ private byte[] status;
 
 public CardApplet() {
     pin = new OwnerPIN(PIN_TRY_LIMIT, PIN_SIZE);
+
     status = JCSystem.makeTransientByteArray((short) 1, JCSystem.CLEAR_ON_RESET);  
     keyExchBuffer = JCSystem.makeTransientByteArray((short) 16, JCSystem.CLEAR_ON_RESET);
+    sigBuffer = JCSystem.makeTransientByteArray((short) 30, JCSystem.CLEAR_ON_RESET);
+    nonceC = JCSystem.makeTransientByteArray((short) NONCE_LENGTH, JCSystem.CLEAR_ON_RESET);
+    nonceT = JCSystem.makeTransientByteArray((short) NONCE_LENGTH, JCSystem.CLEAR_ON_RESET);
+
     status[0] = 0x00; // unitialised
 
     skey = (AESKey) KeyBuilder.buildKey(KeyBuilder.TYPE_AES_TRANSIENT_DESELECT, KeyBuilder.LENGTH_AES_128, true);
@@ -97,10 +118,13 @@ public CardApplet() {
     purkc    = (ECPublicKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_F2M_PUBLIC, KeyBuilder.LENGTH_EC_F2M_193, true);      // private rekey Card
     puks     = (ECPublicKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_F2M_PUBLIC, KeyBuilder.LENGTH_EC_F2M_193, true);       // Server certificate verification key
     keyExchangeKP = new KeyPair(ALG_EC_FP, (short) 128); // Use 128 for easy match with AES 128
-    //CCert;      // Server certificate verification key
+
+    CCert = new byte[SIGN_LENGTH];      // Server certificate verification key
 
     AESCihper = Cipher.getInstance(Cipher.ALG_AES_BLOCK_128_CBC_NOPAD);
     ECExch = KeyAgreement.getInstance(KeyAgreement.ALG_EC_SVDP_DH, false);
+    signature = Signature.getInstance(Signature.ALG_ECDSA_SHA, false);
+    random = RandomData.getInstance(ALG_SECURE_RANDOM);
 
     cID = new byte[4];
     tInfo = JCSystem.makeTransientByteArray((short) 6, JCSystem.CLEAR_ON_RESET);
@@ -164,7 +188,7 @@ public void process(APDU apdu) throws ISOException, APDUException {
         break;
     case 0x10:
         if (!checkAndCopyTypeAndVersion(buffer)) ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
-                break;
+        break;
     case 0x20:
         //charge
         break;
@@ -214,7 +238,7 @@ public void process(APDU apdu) throws ISOException, APDUException {
 
         break;
     case 0x60:
-        //revoke
+        // rekey
         break;
     case 0xf0:
         //reset (connection)
@@ -283,25 +307,7 @@ public void process(APDU apdu) throws ISOException, APDUException {
                 authenticatePhase1(apdu, buffer);
                 break;
             case 0x0f:
-                /*
-                 * AUTHENTICATE instruction part 2
-                 * Card received session key skey, and sent its credentials encrypted with skey.
-                 * INS: 0x10
-                 * P1: Terminal Type
-                 * P2: Terminal Software version
-                 * Lc: 
-                 * Data 2.0:
-                 *      4 bytes terminal ID
-                 *      
-                 */
-
-                // First get and check the length of the data buffer:
-                lc_length = apdu.setIncomingAndReceive();
-                if (lc_length < (byte) AUTH1_INC_LEN) {
-                    ISOException.throwIt((short) (SW_WRONG_LENGTH | AUTH1_INC_LEN));
-                }
-
-
+         
                 break;
             case 0x01: // terminal authenticated as TMan
             case 0x02: // terminal authenticated as TChar
@@ -330,6 +336,7 @@ public void process(APDU apdu) throws ISOException, APDUException {
      *          Terminal nonce (32 bits): nonceT
      *          AES session key (128 bits): skey
      *
+     *
      * Data 2.0: TODO: update this in the design document
      *      4 bytes Terminal ID
      *      Public key exchange component, skeyT
@@ -345,19 +352,65 @@ public void process(APDU apdu) throws ISOException, APDUException {
         buffer = apdu.getBuffer();
         Util.arrayCopyNonAtomic(buffer, (short) 0, tInfo, (short) 2, (short) 4); 
 
-        // TODO: get signature and verify it; abort if it does not verify using pukT corresponding to Terminal type
+        // Verify the signature over the message
+        Util.arrayCopyNonAtomic(tInfo, (short) 0, sigBuffer, (short) 0, (short) 6);
+        Util.arrayCopyNonAtomic(buffer, SK_EXCH_PUBLIC_OFFSET, sigBuffer, (short) 6, (short) AES_KEY_LENGTH)
+        switch(tInfo[(short) 0]) { // Switch on card type
+            case TERM_TYPE_TMAN:
+                signature.init(pukTMan, MODE_VERIFY);
+                break;
+            case TERM_TYPE_TCHAR:
+                signature.init(pukTChar, MODE_VERIFY);
+                break;
+            case TERM_TYPE_TCONS:
+                signature.init(pukTCons, MODE_VERIFY);
+                break;
+            default: // unsupported type
+                ISOException.throwIt(SW_FUNC_NOT_SUPPORTED);                
+        }
+        
+        if (!signature.verify(sigBuffer, (short) 0, (short) 6 + AES_KEY_LENGTH, buffer, SK_EXCH_SIG1_OFFSET, SIGN_LENGTH)) {
+            ISOException.throwIt(SW_WRONG_DATA);
+        }
 
+        // Generate our part of the session key.
         keyExchangeKP.genKeyPair();
         ECExch.init(keyExchangeKP.getPrivate());
         ECExch.generateSecret(buffer, SK_EXCH_PUBLIC_OFFSET, AES_KEY_LENGTH, keyExchBuffer, (short) 0);
 
         // Convert keyExchBuffer to skey
         skey.setKey(keyExchBuffer, (short) 0);
+
+        // Generate Card Nonce nonceC
+        random.generateData(nonceC, (short) 0, (short) 8);
         
-        // Prepare response 
+        /*
+         *  Prepare response 
+         *
+         *  Contents:
+         *  skeyC (16 bytes)
+         *
+         *  encrypted:
+         *      cardID (4 bytes)
+         *      nonceC (8 bytes)
+         *      CCert (16 bytes)
+         *      card message signature (16 bytes)
+         */
         apdu.setOutgoingLength(AUTH1_RESP_LEN);
 
         keyExchangeKP.getPublic.getW(buffer, (short) 0); // first copy the public key exchange part
+
+        // TODO encrypt all this and update buffer offsets
+        Util.arrayCopyNonAtomic(cID, (short) 0, buffer, (short) 0, (short) 4); // card ID
+        Util.arrayCopyNonAtomic(nonceC, (short) 0, buffer, (short) 4, (short) 8);
+        Util.arrayCopyNonAtomic(CCert, (short) 0, buffer, (short) 12, (short) 16);
+        
+        signature.init(prkc, MODE_SIGN);
+        signature.sign(buffer, (short) 0, (short) 28, buffer, (short) 28); // signature into buffer
+        
+        
+        
+        
 
         // TODO: generate random nonceC
         // TODO: encrypt cardID, nonceC, CCert, and signature with prkC over previous fields
@@ -366,6 +419,24 @@ public void process(APDU apdu) throws ISOException, APDUException {
     }
 
     private void authenticatePhase2 (APDU apdu, byte[] buffer) {
+        /*
+         * AUTHENTICATE instruction part 2
+         * Card received session key skey, and sent its credentials encrypted with skey.
+         * INS: 0x10
+         * P1: Terminal Type
+         * P2: Terminal Software version
+         * Lc: 
+         * Data 2.0:
+         *      4 bytes terminal ID
+         *      
+         */
+
+        // First get and check the length of the data buffer:
+        lc_length = apdu.setIncomingAndReceive();
+        if (lc_length < (byte) AUTH1_INC_LEN) {
+            ISOException.throwIt((short) (SW_WRONG_LENGTH | AUTH1_INC_LEN));
+        }
+
 
 
 
