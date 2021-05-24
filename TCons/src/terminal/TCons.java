@@ -61,6 +61,8 @@ public class TCons extends JPanel implements ActionListener {
     private static final byte TERMINAL_TYPE = (byte) 0x3;
 
 
+
+
     //keys
     private ECPublicKey pukc;             // public key Card
     private ECPrivateKey prkTCons;        // private key TCons
@@ -70,6 +72,10 @@ public class TCons extends JPanel implements ActionListener {
 
     private AESKey skey;                  // Session key
 
+    //length constants
+    private static final short TID_LENGTH     = 4;
+    private static final short NONCET_LENGTH  = 4;
+    private static final short AES_KEY_LENGTH = 16;
     //Instruction bytes
     private static final byte PRFE_CLA = (byte) 0xB0;
     private static final byte READ_INS = (byte) 0x00;
@@ -152,19 +158,40 @@ public class TCons extends JPanel implements ActionListener {
         return 0;
     };
 
-    public void authenticateCardAndBuyer(CardApplet card){                                                         //authenticate card and buyer before we perform any transactions
+    public void authenticateCard(CardApplet card){                                                         //authenticate card before we perform any transactions
         //authenticate card
-        //buyer provides pin to terminal
-        //terminal presents pin to card
-        //if card returns true for isValidated(), buyer is authenticated
-        //else it returns number of tries left for the pin, if this is 0, the card is blocked: exit
+        byte[] nonceT = generateNonce();
+
+        //data to be sent in the apdu: enc({tID, nonceT, skey}, prkt)
+        //tID (= 4 bytes) + nonceT (= 4 bytes) + skey (= 16 bytes), sign with prkTCons
+        byte[] message = new byte[24];
+        byte[] signedMessage = sign(message, prkTCons);
+        //construct apdu with AUTH_INS and signedMessage as data
+        //send apdu to card
+        //response from card contains CCert, which needs to be verified
+        //if verified then card is authenticated, else exit and revoke card.
+    };
+
+    public void authenticateBuyer(CardApplet card) {                                    //authenticate buyer before we perform any transactions
+        /*buyer enters pin
+        send pin to card
+        if pin not verified, try new pin
+        if pin tries remaining = 0 and pin =! verified, revoke card and exit.
+         */
+    }
+
+    public byte[] generateNonce(){
+        //generate a 32 bit random nonce
+        SecureRandom random = new SecureRandom();
+        byte[] nonce = new byte[4];
+        return random.nextBytes(nonce);
     };
 
     public void consumeQuota(int amount, int balance){                                                        //use an amount of petrol quota on the card
         //amount = entered by the buyer
         //card has quota balance
         if (balance - amount < 0){
-
+            return;
         }
         //if quota on card - amount < 0 : exit
         //else
@@ -181,8 +208,9 @@ public class TCons extends JPanel implements ActionListener {
 
     short getGasUsed();                                                                                          //return the amount of gas dispensed
 
+
     public byte[] sign(byte[] data, byte[] key){
-        Signature sign = Signature.getInstance("");                               //determine signing algorithm
+        Signature sign = Signature.getInstance("SHA256withECDSA");                               //determine signing algorithm -> elliptic curve signing?
         sign.initSign(key);
         sign.update(data);
         byte[] signature = sign.sign();
@@ -200,17 +228,23 @@ public class TCons extends JPanel implements ActionListener {
 
     };
 
-    public byte[] mac(byte[] data){                                                                              //mac code for sending data between card and terminal, using java.crypto.Mac object?
+    public byte[] mac(byte[] data, AESKey key){                                                                              //mac code for sending data between card and terminal, using java.crypto.Mac object?
         //create mac object
-        Mac mac = Mac.getInstance(""); //TODO: algorithm for mac?
+        Mac mac = Mac.getInstance("SHA-1"); //TODO: algorithm for mac? -> SHA-1 outputs 20 bytes
         //initialise the Mac object with the skey
-        mac.init(skey);
+        mac.init(key);
         //compute mac
         byte[] macResult = mac.doFinal(data);
         return macResult;
     };
 
     public boolean verify(byte[] data, byte[] key);
+
+    public byte[] encryptAES(byte[] data, AESKey skey){
+        return data;
+    }
+
+
 
     //original terminal code starts here
 
