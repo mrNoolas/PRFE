@@ -174,6 +174,11 @@ public class TChar extends JPanel implements ActionListener {
 		// Updates the quota on the card
 		// Requires authenticateCardAndBuyer()
 		// new_amount = old_amount + quota
+		CommandAPDU chargeCommand = new CommandAPDU((int)PRFE_CLA, (int) CHAR_INS);
+		
+		ResponseAPDU response = card.transmit(chargeCommand);
+		
+		byte[] responseBytes = response.getBytes();
 
 	}
 
