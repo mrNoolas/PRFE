@@ -22,7 +22,7 @@ private static final short AUTH2_INC_LEN = 200; // TODO update this
 
 // Response lenghts
 private static final short READ_RESP_LEN = 8;
-private static final short AUTH1_RESP_LEN = 44;
+private static final short AUTH1_RESP_LEN = 80;
 
 // keys
 private AESKey skey;
@@ -82,6 +82,7 @@ private byte[] nonceT;
 
 private byte[] keyExchBuffer;
 private byte[] sigBuffer;
+private byte[] encBuffer;
 
 private short petrolCredits;
 
@@ -107,6 +108,7 @@ public CardApplet() {
     sigBuffer = JCSystem.makeTransientByteArray((short) 30, JCSystem.CLEAR_ON_RESET);
     nonceC = JCSystem.makeTransientByteArray((short) NONCE_LENGTH, JCSystem.CLEAR_ON_RESET);
     nonceT = JCSystem.makeTransientByteArray((short) NONCE_LENGTH, JCSystem.CLEAR_ON_RESET);
+    encBuffer = JCSystem.makeTransientByteArray((short) 100, JCSystem.CLEAR_ON_RESET);
 
     status[0] = 0x00; // unitialised
 
@@ -361,10 +363,10 @@ public void process(APDU apdu) throws ISOException, APDUException {
      *      Public key exchange component, skeyT
      *      Signature over P1, P2, TID and skeyT with prkT
      */ 
-/*
+
     private void authenticatePhase1 (APDU apdu, byte[] buffer) {
         // First get and check the length of the data buffer:
-        lc_length = apdu.setIncomingAndReceive();
+        short lc_length = apdu.setIncomingAndReceive();
         if (lc_length < (byte) AUTH1_INC_LEN) {
             ISOException.throwIt((short) (SW_WRONG_LENGTH | AUTH1_INC_LEN));
         }
@@ -377,19 +379,19 @@ public void process(APDU apdu) throws ISOException, APDUException {
         Util.arrayCopyNonAtomic(buffer, SK_EXCH_PUBLIC_OFFSET, sigBuffer, (short) 6, (short) AES_KEY_LENGTH);
         switch(tInfo[(short) 0]) { // Switch on card type
             case TERM_TYPE_TMAN:
-                signature.init(pukTMan, MODE_VERIFY);
+                signature.init(pukTMan, Signature.MODE_VERIFY);
                 break;
             case TERM_TYPE_TCHAR:
-                signature.init(pukTChar, MODE_VERIFY);
+                signature.init(pukTChar, Signature.MODE_VERIFY);
                 break;
             case TERM_TYPE_TCONS:
-                signature.init(pukTCons, MODE_VERIFY);
+                signature.init(pukTCons, Signature.MODE_VERIFY);
                 break;
             default: // unsupported type
                 ISOException.throwIt(SW_FUNC_NOT_SUPPORTED);                
         }
         
-        if (!signature.verify(sigBuffer, (short) 0, (short) 6 + AES_KEY_LENGTH, buffer, SK_EXCH_SIG1_OFFSET, SIGN_LENGTH)) {
+        if (!signature.verify(sigBuffer, (short) 0, (short) ((short) 6 + AES_KEY_LENGTH), buffer, SK_EXCH_SIG1_OFFSET, SIGN_LENGTH)) {
             ISOException.throwIt(SW_WRONG_DATA);
         }
 
@@ -415,26 +417,21 @@ public void process(APDU apdu) throws ISOException, APDUException {
          *      nonceC (8 bytes)
          *      CCert (16 bytes)
          *      card message signature (16 bytes)
-         *
+         */
         apdu.setOutgoingLength(AUTH1_RESP_LEN);
 
-        keyExchangeKP.getPublic.getW(buffer, (short) 0); // first copy the public key exchange part
+        ((ECPublicKey) keyExchangeKP.getPublic()).getW(buffer, (short) 0); // first copy the public key exchange part
+        
+        // Prepare the encryption buffer
+        Util.arrayCopyNonAtomic(cID, (short) 0, buffer, (short) 16, (short) 4); // card ID
+        Util.arrayCopyNonAtomic(nonceC, (short) 0, buffer, (short) 20, (short) 8);
+        Util.arrayCopyNonAtomic(CCert, (short) 0, buffer, (short) 32, (short) 16);
 
-        // TODO encrypt all this and update buffer offsets
-        Util.arrayCopyNonAtomic(cID, (short) 0, buffer, (short) 0, (short) 4); // card ID
-        Util.arrayCopyNonAtomic(nonceC, (short) 0, buffer, (short) 4, (short) 8);
-        Util.arrayCopyNonAtomic(CCert, (short) 0, buffer, (short) 12, (short) 16);
-        
-        signature.init(prkc, MODE_SIGN);
-        signature.sign(buffer, (short) 0, (short) 28, buffer, (short) 28); // signature into buffer
-        
-        
-        
-        
+        signature.init(prkc, Signature.MODE_SIGN);
+        signature.sign(buffer, (short) 0, (short) 48, buffer, (short) 48); // signature into buffer
 
-        // TODO: generate random nonceC
-        // TODO: encrypt cardID, nonceC, CCert, and signature with prkC over previous fields
-
+        AESCipher.doFinal(buffer, (short) 16, (short) 64, buffer, (short) 16); // encrypt in 4 blocks
+        
         apdu.sendBytes((short) 0, AUTH1_RESP_LEN);
     }
 
@@ -449,10 +446,10 @@ public void process(APDU apdu) throws ISOException, APDUException {
          * Data 2.0:
          *      4 bytes terminal ID
          *      
-         *
+         */
 
         // First get and check the length of the data buffer:
-        lc_length = apdu.setIncomingAndReceive();
+        short lc_length = apdu.setIncomingAndReceive();
         if (lc_length < (byte) AUTH1_INC_LEN) {
             ISOException.throwIt((short) (SW_WRONG_LENGTH | AUTH1_INC_LEN));
         }
