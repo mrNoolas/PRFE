@@ -48,10 +48,6 @@ private static final short PUKS_PERS_OFFSET = 150;
 private static final short CCERT_PERS_OFFSET = 175;
 private static final short PIN_PERS_OFFSET = 195;
 
-// Other offsets
-private static final short SK_EXCH_PUBLIC_OFFSET = 4;
-private static final short SK_EXCH_SIG1_OFFSET = SK_EXCH_PUBLIC OFFSET + AES_KEY_LENGTH;
-
 // some lengths in bytes
 private static final short EC_KEY_LENGTH = 25;
 private static final short EC_CERT_LENGTH = 20;
@@ -63,6 +59,10 @@ private KeyAgreement ECExch;
 private Cipher AESCipher;
 private Signature signature;
 private RandomData random;
+
+// Other offsets
+private static final short SK_EXCH_PUBLIC_OFFSET = 4;
+private static final short SK_EXCH_SIG1_OFFSET = SK_EXCH_PUBLIC_OFFSET + AES_KEY_LENGTH;
 
 // Determines whether the card is in personalisation phase
 private boolean manageable = true;
@@ -118,14 +118,14 @@ public CardApplet() {
     prkc     = (ECPrivateKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_F2M_PRIVATE, KeyBuilder.LENGTH_EC_F2M_193, true);       // private key Card
     purkc    = (ECPublicKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_F2M_PUBLIC, KeyBuilder.LENGTH_EC_F2M_193, true);      // private rekey Card
     puks     = (ECPublicKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_F2M_PUBLIC, KeyBuilder.LENGTH_EC_F2M_193, true);       // Server certificate verification key
-    keyExchangeKP = new KeyPair(ALG_EC_FP, (short) 128); // Use 128 for easy match with AES 128
+    keyExchangeKP = new KeyPair(KeyPair.ALG_EC_FP, (short) 128); // Use 128 for easy match with AES 128
 
     CCert = new byte[SIGN_LENGTH];      // Server certificate verification key
 
-    AESCihper = Cipher.getInstance(Cipher.ALG_AES_BLOCK_128_CBC_NOPAD);
+    AESCipher = Cipher.getInstance(Cipher.ALG_AES_BLOCK_128_CBC_NOPAD, false);
     ECExch = KeyAgreement.getInstance(KeyAgreement.ALG_EC_SVDP_DH, false);
     signature = Signature.getInstance(Signature.ALG_ECDSA_SHA, false);
-    random = RandomData.getInstance(ALG_SECURE_RANDOM);
+    random = RandomData.getInstance(RandomData.ALG_SECURE_RANDOM);
 
     cID = new byte[4];
     tInfo = JCSystem.makeTransientByteArray((short) 6, JCSystem.CLEAR_ON_RESET);
@@ -161,7 +161,6 @@ public void process(APDU apdu) throws ISOException, APDUException {
     /* Ignore the APDU that selects this applet... */
     if (selectingApplet()) return;
     if (buffer[OFFSET_CLA] != PRFE_CLA) ISOException.throwIt(SW_CLA_NOT_SUPPORTED);
-
 
     switch (ins & 0xff) {
     case 0x00: 
@@ -324,7 +323,7 @@ public void process(APDU apdu) throws ISOException, APDUException {
     private void authenticate(APDU apdu, byte[] buffer) {
         switch (status[(short) 0] & 0xff){
             case 0x00: // not authenticated, or in the process of authentication
-                authenticatePhase1(apdu, buffer);
+                //authenticatePhase1(apdu, buffer);
                 break;
             case 0x0f:
          
@@ -362,6 +361,7 @@ public void process(APDU apdu) throws ISOException, APDUException {
      *      Public key exchange component, skeyT
      *      Signature over P1, P2, TID and skeyT with prkT
      */ 
+/*
     private void authenticatePhase1 (APDU apdu, byte[] buffer) {
         // First get and check the length of the data buffer:
         lc_length = apdu.setIncomingAndReceive();
@@ -374,7 +374,7 @@ public void process(APDU apdu) throws ISOException, APDUException {
 
         // Verify the signature over the message
         Util.arrayCopyNonAtomic(tInfo, (short) 0, sigBuffer, (short) 0, (short) 6);
-        Util.arrayCopyNonAtomic(buffer, SK_EXCH_PUBLIC_OFFSET, sigBuffer, (short) 6, (short) AES_KEY_LENGTH)
+        Util.arrayCopyNonAtomic(buffer, SK_EXCH_PUBLIC_OFFSET, sigBuffer, (short) 6, (short) AES_KEY_LENGTH);
         switch(tInfo[(short) 0]) { // Switch on card type
             case TERM_TYPE_TMAN:
                 signature.init(pukTMan, MODE_VERIFY);
@@ -415,7 +415,7 @@ public void process(APDU apdu) throws ISOException, APDUException {
          *      nonceC (8 bytes)
          *      CCert (16 bytes)
          *      card message signature (16 bytes)
-         */
+         *
         apdu.setOutgoingLength(AUTH1_RESP_LEN);
 
         keyExchangeKP.getPublic.getW(buffer, (short) 0); // first copy the public key exchange part
@@ -449,7 +449,7 @@ public void process(APDU apdu) throws ISOException, APDUException {
          * Data 2.0:
          *      4 bytes terminal ID
          *      
-         */
+         *
 
         // First get and check the length of the data buffer:
         lc_length = apdu.setIncomingAndReceive();
