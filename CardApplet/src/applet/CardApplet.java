@@ -94,7 +94,7 @@ private byte[] lastKnownTime;
 // 0x01 terminal authenticated as TMan
 // 0x02 terminal authenticated as TChar
 // 0x03 terminal authenticated as TCons
-// 0x07 card has been revoked
+// 0x04 card has been revoked
 // 0xff authentication initiated, session key exchanged
 // User authentication is handled by the PIN class
 private byte[] status; 
@@ -148,8 +148,8 @@ public static void install(byte[] buffer, short offset, byte length)
 }
 
 public boolean select() {
-    status[0] = 0x00; // unitialised
-    tInfo[0] = 0x000000; // sets entire array to 0 (4 bytes)
+    status[0] = (byte) 0x00; // unitialised
+    tInfo[0] = 0x00000000; // sets entire array to 0 (6 bytes)
 
     return true;
 }
@@ -186,10 +186,12 @@ public void process(APDU apdu) throws ISOException, APDUException {
         buffer = apdu.getBuffer();
         Util.arrayCopyNonAtomic(buffer, (short) 0, tInfo, (short) 2, (short) READ_INC_LEN); 
 
+        select(); // reset // TODO: Configure this as a better reset
         read(apdu, buffer);
         break;
     case 0x10:
         if (!checkAndCopyTypeAndVersion(buffer)) ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
+        authenticate(apdu, buffer);
         break;
     case 0x20:
         //charge
@@ -289,9 +291,10 @@ public void process(APDU apdu) throws ISOException, APDUException {
     private boolean checkAndCopyTypeAndVersion(byte[] buffer) {
         short type = (short) (buffer[OFFSET_P1] & 0xff);
         boolean plausible = type < (short) 4 || type == (short) 0xff; // The type should at least be in the right numeric range.
+        short s = status[(short) 0] & 0xff;
 
         // Terminal type should stay the same as before, otherwise the authentication fails.
-        if (((status[(short) 0] & 0xff) > 0 && tInfo[(short) 0] != type) || !plausible) return false; 
+        if ((s != (short) 0xff && s > (short) 3) || (s > (short) 0 && tInfo[(short) 0] != type) || !plausible) return false; 
 
         tInfo[(short) 0] = buffer[OFFSET_P1]; // terminal type
         tInfo[(short) 1] = buffer[OFFSET_P2]; // terminal software version 
@@ -431,7 +434,8 @@ public void process(APDU apdu) throws ISOException, APDUException {
         signature.sign(buffer, (short) 0, (short) 48, buffer, (short) 48); // signature into buffer
 
         AESCipher.doFinal(buffer, (short) 16, (short) 64, buffer, (short) 16); // encrypt in 4 blocks
-        
+
+        status[(short) 0] = (byte) 0xff;
         apdu.sendBytes((short) 0, AUTH1_RESP_LEN);
     }
 
