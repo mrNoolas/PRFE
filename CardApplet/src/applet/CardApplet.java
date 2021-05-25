@@ -203,19 +203,33 @@ public void process(APDU apdu) throws ISOException, APDUException {
 		 * This instruction can be executed at any authenticated terminal.
 		 *
 		 * INS: 0x40 
-		 * P1: Terminal Software Version
-		 * P2: Signing certificate
-		 * Lc: 
-		 * Data: 
+		 * P1: Terminal Type
+		 * P2: Terminal Software Version 
+		 * Lc: should be SIGN_LENGTH
+		 * Data: Signature over the revoke operation
 		 *
-		 
+		
+		if (!checkAndCopyTypeAndVersion(buffer)) ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
+		
+		lc_length = apdu.setIncomingAndReceive();
+        if (lc_length < (byte) SIGN_LENGTH) {
+            ISOException.throwIt((short) (SW_WRONG_LENGTH | SIGN_LENGTH));
+        }
+		
+		buffer = apdu.getBuffer();
+		
 		if (((status[(short) 0] & 0xff) == 0x01) || ((status[(short) 0] & 0xff) == 0x02) || ((status[(short) 0] & 0xff) == 0x03) ) {
 			tInfo[(short) 1] = buffer[OFFSET_P1];
+			Util.arrayCopyNonAtomic(buffer, OFFSET_INS, sigBuffer, (short) 0, (short) 1);
+			Util.arrayCopyNonAtomic(cID, (short) 0, sigBuffer, (short) 1, (short) 4);
 			
-			// TODO: check validity of certificate
-			if (true) {
+			
+			if (!verify(sigBuffer,(short) 0,(short) 5 ,buffer, (short) 0, SIGN_LENGTH)) {
+				ISOException.throwIt(SW_WRONG_DATA);
+			}
+			else {
 				revoke(apdu, buffer);
-			}	
+			}
 		} */
 		
         break;
@@ -496,7 +510,6 @@ public void process(APDU apdu) throws ISOException, APDUException {
 	 * Assumes that the validity of the revoking instruction certificate has been checked.
 	 *
 	private void revoke(APDU apdu, byte[] buffer) {
-		buffer = apdu.getBuffer();
 		
 		status[0] = 0x07; // Card status is now revoked
 	} */
