@@ -117,7 +117,7 @@ public class TCons extends JPanel implements ActionListener {
 
         TCert = null;                                                                      // Terminal certificate containing
                                                                                            // ID, type of device and expiry date
-        tID = new byte[4];
+        tID = new byte[TID_LENGTH];
 
 
         //simulatorInterface = new JavaxSmartCardInterface(); // SIM
@@ -133,12 +133,13 @@ public class TCons extends JPanel implements ActionListener {
         CommandAPDU readCommand = new CommandAPDU((byte) PRFE_CLA, (byte) READ_INS, (byte)TERMINAL_TYPE, (byte)TERMINAL_SOFTWARE_VERSION);
         //card sends back apdu with the data after transmitting the commandAPDU to the card
         ResponseAPDU response = applet.transmit(readCommand);
-        //process the response apdu and display the information on the terminal?
+        //process the response apdu
         byte[] responseBytes = response.getBytes();
         byte[] data = response.getData(); //data for read command is the card id and the petrol credits?
-        //parseData(byte[] data)?
-        //setText(response);
-        //alternatively maybe use the setText(response) to extract the data from the apdu and display on terminal?
+        byte[] cardID = new byte[4];
+        Util.arrayCopy(data, (short) 0, cardID, (short) 0, (short) 4);
+
+        //TODO: parse data from the card
     };
 
     public byte[] getCardData(ResponseAPDU response){
@@ -146,48 +147,64 @@ public class TCons extends JPanel implements ActionListener {
         return data;
     }
 
-    public byte[] getCardID(byte[] data){
+//    public byte[] getCardID(byte[] data){
+//        byte[] cardID = new byte[4];
+//        Util.arrayCopy(data, (short) 0, cardID, (short) 0, (short) 4);
+//        return cardID;
+//    }
 
-        return data;
-    }
-
-    public int getPetrolCredit(byte[] data){
+    public short getPetrolCredit(byte[] data){
         //get petrol credit from the card
         //
         //
         return 0;
     };
 
-    public void authenticateCard(CardApplet card){                                                         //authenticate card before we perform any transactions
-        //authenticate card
+    public void authenticateCard(){                                                         //authenticate card before we perform any transactions
+        //generate nonceT
         byte[] nonceT = generateNonce();
+        //data to be sent in the apdu: enc({tID, nonceT}, prkt)
+        //tID (= 4 bytes) + nonceT (= 4 bytes), encrypt with skey? and sign with prkTCons
+        byte[] message = new byte[8];
+        Util.arrayCopy(tID, (short) 0, message, (short) 0, (short) 4);
+        Util.arrayCopy(nonceT, (short) 0, message, (short) 4, (short) 4);
+        byte[] encryptedMessage = encryptAES(message, skey);
+        byte[] signedMessage = sign(encryptedMessage, prkTCons);
 
-        //data to be sent in the apdu: enc({tID, nonceT, skey}, prkt)
-        //tID (= 4 bytes) + nonceT (= 4 bytes) + skey (= 16 bytes), sign with prkTCons
-        byte[] message = new byte[24];
-        byte[] signedMessage = sign(message, prkTCons);
         //construct apdu with AUTH_INS and signedMessage as data
-        //send apdu to card
-        //response from card contains CCert, which needs to be verified
-        //if verified then card is authenticated, else exit and revoke card.
+        CommandAPDU authenticateCommand = new CommandAPDU((byte) PRFE_CLA, (byte)AUTH_INS, (byte)TERMINAL_TYPE, (byte)TERMINAL_SOFTWARE_VERSION, signedMessage);
+        ResponseAPDU response = applet.transmit(authenticateCommand);
+        //the data from the card should be encrypted
+        byte[] encryptedData = response.getData();
+        byte[] data = decryptAES(encryptedData, skey);
+        //TODO: process data from card, compare nonceT to nonceT' and verify CCert
+
+        //data contains cardID, nonceT', nonceC, CCert.
+        //response from card contains nonceT', CCert, which needs to be verified
+        //if nonceT == nonceT' and CCert = verified,  then card is authenticated, else exit and revoke card.
+        //if card is authenticated, authenticate terminal.
+        return;
     };
 
-    public void authenticateBuyer(CardApplet card) {                                    //authenticate buyer before we perform any transactions
+    public void authenticateBuyer() {               //authenticate buyer before we perform any transactions
+        //TODO: implement authenticate buyer
         /*buyer enters pin
         send pin to card
         if pin not verified, try new pin
-        if pin tries remaining = 0 and pin =! verified, revoke card and exit.
+        if pin tries remaining = 0 and pin != verified, revoke card and exit.
          */
     }
 
     public byte[] generateNonce(){
         //generate a 32 bit random nonce
         SecureRandom random = new SecureRandom();
-        byte[] nonce = new byte[4];
+        byte[] nonce = new byte[NONCET_LENGTH];
         return random.nextBytes(nonce);
     };
 
     public void consumeQuota(int amount, int balance){                                                        //use an amount of petrol quota on the card
+        //TODO: implement method to update the quota on the card
+
         //amount = entered by the buyer
         //card has quota balance
         if (balance - amount < 0){
@@ -200,13 +217,16 @@ public class TCons extends JPanel implements ActionListener {
 
 
     void setMaxGas(){
+        //TODO: implement method to set maximum value for gas consumption
         //read balance from the card
         int balance = getPetrolCredit();
         //
         //
     };                                                                             //set the max amount of gas available to the buyer based on the quota on card (a short?)
 
-    short getGasUsed();                                                                                          //return the amount of gas dispensed
+    short getGasUsed(){
+        //TODO: implement method to update amount of gas used by buyer
+    };                                                                                          //return the amount of gas dispensed
 
 
     public byte[] sign(byte[] data, byte[] key){
@@ -238,10 +258,23 @@ public class TCons extends JPanel implements ActionListener {
         return macResult;
     };
 
-    public boolean verify(byte[] data, byte[] key);
+    public boolean verify(byte[] signature, byte[] key){
+        //TODO: verification of signature using EC
+        return true;
+    };
 
-    public byte[] encryptAES(byte[] data, AESKey skey){
-        return data;
+    public byte[] encryptAES(byte[] data, AESKey key){
+        Cipher cipher = Cipher.getInstance("AES/ECB/PKCS5Padding");
+        cipher.init(Cipher.ENCRYPT_MODE, key);
+        byte[] encryptedData = cipher.doFinal(data);
+        return encryptedData;
+    }
+
+    public byte[] decryptAES(byte[] encryptedMessage, AESKey key){
+        Cipher cipher = Cipher.getInstance("AES/ECB/PKCS5PADDING");
+        cipher.init(Cipher.DECRYPT_MODE, key);
+        byte[] decryptedMessage = cipher.doFinal(encryptedMessage);
+        return decryptedMessage;
     }
 
 
