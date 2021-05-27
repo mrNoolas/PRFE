@@ -5,6 +5,7 @@ import javacard.security.*;
 import javacardx.crypto.*;
 
 
+
 public class CardApplet extends Applet implements ISO7816 {
 private static final byte PRFE_CLA = (byte) 0xB0;
 private static final byte CARD_SOFTWARE_VERSION = 0x0;
@@ -515,6 +516,6 @@ public void process(APDU apdu) throws ISOException, APDUException {
 	 *
 	private void revoke(APDU apdu, byte[] buffer) {
 		
-		status[0] = 0x07; // Card status is now revoked
+		status[0] = 0x04; // Card status is now revoked
 	} */
 }

@@ -67,8 +67,13 @@ public class TChar extends JPanel implements ActionListener {
 	private ECPrivateKey prkTChar; // private key TChar
 	private ECPublicKey purkTChar; // public rekey key TChar
 	private ECPublicKey puks; // certificate verification key
+	private AESKey skey; 
 	private byte[] TCert; // Terminal certificate
 
+	//Length constants
+	private static final short TID_LENGTH     = 4;
+    private static final short NONCET_LENGTH  = 4;
+    private static final short AES_KEY_LENGTH = 16;
 	//Instruction bytes
     private static final byte PRFE_CLA = (byte) 0xB0;
     private static final byte READ_INS = (byte) 0x00;
@@ -114,6 +119,8 @@ public class TChar extends JPanel implements ActionListener {
 		purkTChar = (ECPublicKey)  KeyBuilder.buildKey(KeyBuilder.TYPE_EC_F2M_PUBLIC,  KeyBuilder.LENGTH_EC_F2M_193, true);
 		puks      = (ECPublicKey)  KeyBuilder.buildKey(KeyBuilder.TYPE_EC_F2M_PUBLIC,  KeyBuilder.LENGTH_EC_F2M_193, true);
 		TCert     = null;
+		
+		tID = new byte[TID_LENGTH];
 
 
 
@@ -129,9 +136,12 @@ public class TChar extends JPanel implements ActionListener {
 
 		CommandAPDU readCommand = new CommandAPDU((int)PRFE_CLA, (int) READ_INS, (int)TERMINAL_TYPE, (int)TERMINAL_SOFTWARE_VERSION);
 
-		ResponseAPDU response = card.transmit(readCommand);
+		ResponseAPDU response = applet.transmit(readCommand);
 
 		byte[] responseBytes = response.getBytes();
+		byte[] data = response.getData();
+		byte[] cardID = new byte[(short) 4];
+		Util.arrayCopy(data, (short) 0, cardID, (short) 0, (short) 4);
 	}
 
 	public void authenticateCardAndBuyer(CardApplet card) {
