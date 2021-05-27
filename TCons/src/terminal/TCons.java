@@ -76,6 +76,13 @@ public class TCons extends JPanel implements ActionListener {
     private static final short TID_LENGTH     = 4;
     private static final short NONCET_LENGTH  = 4;
     private static final short AES_KEY_LENGTH = 16;
+
+
+    private KeyAgreement ECExch;
+    private Cipher AESCipher;
+    private Signature signature;
+    private RandomData random;
+
     //Instruction bytes
     private static final byte PRFE_CLA = (byte) 0xB0;
     private static final byte READ_INS = (byte) 0x00;
@@ -114,11 +121,17 @@ public class TCons extends JPanel implements ActionListener {
         prkTCons  = (ECPrivateKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_F2M_PRIVATE, KeyBuilder.LENGTH_EC_F2M_193, true);        // private key TCons
         purkTCons = (ECPublicKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_F2M_PUBLIC, KeyBuilder.LENGTH_EC_F2M_193, true);         // public rekey TCons
         puks      = (ECPublicKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_F2M_PUBLIC, KeyBuilder.LENGTH_EC_F2M_193, true);         // certificate verification key
+        keyExchangeKP = new KeyPair(KeyPair.ALG_EC_FP, (short) 128); // Use 128 for easy match with AES 128
+
 
         TCert = null;                                                                      // Terminal certificate containing
                                                                                            // ID, type of device and expiry date
         tID = new byte[TID_LENGTH];
 
+        AESCipher = Cipher.getInstance(Cipher.ALG_AES_BLOCK_128_CBC_NOPAD, false);
+        ECExch = KeyAgreement.getInstance(KeyAgreement.ALG_EC_SVDP_DH, false);
+        signature = Signature.getInstance(Signature.ALG_ECDSA_SHA, false);
+        random = RandomData.getInstance(RandomData.ALG_SECURE_RANDOM);
 
         //simulatorInterface = new JavaxSmartCardInterface(); // SIM
         buildGUI(parent);
@@ -139,7 +152,12 @@ public class TCons extends JPanel implements ActionListener {
         byte[] cardID = new byte[4];
         Util.arrayCopy(data, (short) 0, cardID, (short) 0, (short) 4);
 
-        //TODO: parse data from the card
+        ByteBuffer bb = ByteBuffer.allocate(2);
+        bb.order(ByteOrder.LITTLE_ENDIAN);
+        bb.put(data[4]);
+        bb.put(data[5]);
+        short petrolQuota = bb.getShort(0);
+
     };
 
     public byte[] getCardData(ResponseAPDU response){
@@ -163,28 +181,41 @@ public class TCons extends JPanel implements ActionListener {
     public void authenticateCard(){                                                         //authenticate card before we perform any transactions
         //generate nonceT
         byte[] nonceT = generateNonce();
-        //data to be sent in the apdu: enc({tID, nonceT}, prkt)
-        //tID (= 4 bytes) + nonceT (= 4 bytes), encrypt with skey? and sign with prkTCons
-        byte[] message = new byte[8];
+        //data to be sent in the apdu: tID, skeyT, sign({tID, skeyT}, prkTCons)
+        //tID (= 4 bytes) + skeyT (= 16 bytes), sign tID and skeyT with prkTCons
+
+        //skeyT is public part of skey, use keypair generator to generate this and the secret part of skeyT?
+        keyExchangeKP.genKeyPair();
+        byte[] skeyT = keyExchangeKP.getPublic().getEncoded();
+        byte[] skeyTPriv = keyExchangeKP.getPrivate().getEncoded();
+
+        byte[] dataToSign = new byte[20];
+        Util.arrayCopy(tID, (short) 0, dataToSign, (short) 0, (short) 4);
+        Util.arraycopy(skeyT, (short) 0, dataToSign, (short) 4, (short) 16);
+        byte[] signedData = sign(dataToSign);
+
+        byte[] message = new byte[20 + signedData.length];
         Util.arrayCopy(tID, (short) 0, message, (short) 0, (short) 4);
-        Util.arrayCopy(nonceT, (short) 0, message, (short) 4, (short) 4);
-        byte[] encryptedMessage = encryptAES(message, skey);
-        byte[] signedMessage = sign(encryptedMessage, prkTCons);
+        Util.arrayCopy(skeyT, (short) 0, message, (short) 4, (short) AES_KEY_LENGTH);
+        Util.arrayCopy(signedData, (short) 0, message, (short) 20, (short) signedData.length);
 
-        //construct apdu with AUTH_INS and signedMessage as data
-        CommandAPDU authenticateCommand = new CommandAPDU((byte) PRFE_CLA, (byte)AUTH_INS, (byte)TERMINAL_TYPE, (byte)TERMINAL_SOFTWARE_VERSION, signedMessage);
+        //construct apdu with AUTH_INS and message as data
+        CommandAPDU authenticateCommand = new CommandAPDU((byte) PRFE_CLA, (byte)AUTH_INS, (byte)TERMINAL_TYPE,
+                (byte)TERMINAL_SOFTWARE_VERSION, message);
         ResponseAPDU response = applet.transmit(authenticateCommand);
-        //the data from the card should be encrypted
-        byte[] encryptedData = response.getData();
-        byte[] data = decryptAES(encryptedData, skey);
-        //TODO: process data from card, compare nonceT to nonceT' and verify CCert
+        //the data from the card should be encrypted -> decrypt with skey, which is skeyC + secret component of skeyT
+        byte[] cardData = response.getData();
 
-        //data contains cardID, nonceT', nonceC, CCert.
-        //response from card contains nonceT', CCert, which needs to be verified
-        //if nonceT == nonceT' and CCert = verified,  then card is authenticated, else exit and revoke card.
+
+        //TODO: process data from card, decrypt, and verify CCert
+
+        //data contains cardID, nonceC, CCert.
+        //response from card contains CCert, which needs to be verified using puks
+        //if CCert does not verify, send reset to card.
         //if card is authenticated, authenticate terminal.
         return;
     };
+
 
     public void authenticateBuyer() {               //authenticate buyer before we perform any transactions
         //TODO: implement authenticate buyer
@@ -197,7 +228,6 @@ public class TCons extends JPanel implements ActionListener {
 
     public byte[] generateNonce(){
         //generate a 32 bit random nonce
-        SecureRandom random = new SecureRandom();
         byte[] nonce = new byte[NONCET_LENGTH];
         return random.nextBytes(nonce);
     };
@@ -229,12 +259,11 @@ public class TCons extends JPanel implements ActionListener {
     };                                                                                          //return the amount of gas dispensed
 
 
-    public byte[] sign(byte[] data, byte[] key){
-        Signature sign = Signature.getInstance("SHA256withECDSA");                               //determine signing algorithm -> elliptic curve signing?
-        sign.initSign(key);
-        sign.update(data);
-        byte[] signature = sign.sign();
-        return signature;
+    public byte[] sign(byte[] data){
+        signature.initSign(prkTCons);
+        signature.update(data);
+        byte[] signedData = signature.sign();
+        return signedData;
     };
 
     public byte[] hash(byte[] data){
@@ -270,11 +299,11 @@ public class TCons extends JPanel implements ActionListener {
         return encryptedData;
     }
 
-    public byte[] decryptAES(byte[] encryptedMessage, AESKey key){
-        Cipher cipher = Cipher.getInstance("AES/ECB/PKCS5PADDING");
-        cipher.init(Cipher.DECRYPT_MODE, key);
-        byte[] decryptedMessage = cipher.doFinal(encryptedMessage);
-        return decryptedMessage;
+    public byte[] decryptAES(byte[] encryptedMessage){
+//        Cipher cipher = Cipher.getInstance("AES/ECB/PKCS5PADDING");
+//        cipher.init(Cipher.DECRYPT_MODE, key);
+//        byte[] decryptedMessage = cipher.doFinal(encryptedMessage);
+//        return decryptedMessage;
     }
 
 
