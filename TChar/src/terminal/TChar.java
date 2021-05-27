@@ -181,17 +181,24 @@ public class TChar extends JPanel implements ActionListener {
 		return macResult;
 	}
 
-	public void updateQuota(CardApplet card, int amount) {
+	public void updateQuota(CardApplet card) {
 		// Updates the quota on the card
 		// Requires authenticateCardAndBuyer()
 		// new_amount = old_amount + quota
-		CommandAPDU chargeCommand = new CommandAPDU((int)PRFE_CLA, (int) CHAR_INS);
-
-		ResponseAPDU response = card.transmit(chargeCommand);
-
+		
+		
+		CommandAPDU chargeCommand = new CommandAPDU((int)PRFE_CLA, (int) CHAR_INS, (int) 0, (int) 0);
+		ResponseAPDU response = applet.transmit(chargeCommand);
 		byte[] responseBytes = response.getBytes();
-
+		
 	}
+	
+	public short getPetrolCredit(byte[] data){
+        //get petrol credit from the card
+        //
+        //
+        return 0;
+    };
 
     void buildGUI(JFrame parent) {
         setLayout(new BorderLayout());
