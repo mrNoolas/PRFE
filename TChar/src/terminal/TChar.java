@@ -2,6 +2,7 @@ package terminal;
 
 import javacard.framework.AID;
 import javacard.framework.ISO7816;
+import javacard.framework.*;
 import javacard.security.*;
 
 import java.awt.BorderLayout;
@@ -55,11 +56,11 @@ import applet.CardApplet;
  *
  */
 public class TChar extends JPanel implements ActionListener {
-	
+
 	private byte[] tID;
 	private byte[] Sver;
 	private byte TERMINAL_SOFTWARE_VERSION;
-	private static final byte TERMINAL_TYPE = (byte) 0x2; 
+	private static final byte TERMINAL_TYPE = (byte) 0x2;
 
 	// keys
 	private ECPublicKey pukc; // public key Card
@@ -67,7 +68,7 @@ public class TChar extends JPanel implements ActionListener {
 	private ECPublicKey purkTChar; // public rekey key TChar
 	private ECPublicKey puks; // certificate verification key
 	private byte[] TCert; // Terminal certificate
-	
+
 	//Instruction bytes
     private static final byte PRFE_CLA = (byte) 0xB0;
     private static final byte READ_INS = (byte) 0x00;
@@ -108,14 +109,14 @@ public class TChar extends JPanel implements ActionListener {
 
 
 		skey      = (AESKey)       KeyBuilder.buildKey(KeyBuilder.TYPE_AES_TRANSIENT_DESELECT, KeyBuilder.LENGTH_AES_128,true);
-		pukc      = (ECPublicKey)  KeyBuilder.buildKey(KeyBuilder.TYPE_EC_F2M_PUBLIC,  KeyBuilder.LENGTH_F2M_193, true);
-		prkTChar  = (ECPrivateKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_F2M_PRIVATE, KeyBuilder.LENGTH_F2M_193, true);
-		purkTChar = (ECPublicKey)  KeyBuilder.buildKey(KeyBuilder.TYPE_EC_F2M_PUBLIC,  KeyBuilder.LENGTH_F2M_193, true);
-		puks      = (ECPublicKey)  KeyBuilder.buildKey(KeyBuilder.TYPE_EC_F2M_PUBLIC,  KeyBuilder.LENGTH_F2M_193, true);
+		pukc      = (ECPublicKey)  KeyBuilder.buildKey(KeyBuilder.TYPE_EC_F2M_PUBLIC,  KeyBuilder.LENGTH_EC_F2M_193, true);
+		prkTChar  = (ECPrivateKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_F2M_PRIVATE, KeyBuilder.LENGTH_EC_F2M_193, true);
+		purkTChar = (ECPublicKey)  KeyBuilder.buildKey(KeyBuilder.TYPE_EC_F2M_PUBLIC,  KeyBuilder.LENGTH_EC_F2M_193, true);
+		puks      = (ECPublicKey)  KeyBuilder.buildKey(KeyBuilder.TYPE_EC_F2M_PUBLIC,  KeyBuilder.LENGTH_EC_F2M_193, true);
 		TCert     = null;
 
-		
-		
+
+
 
     }
 
@@ -125,11 +126,11 @@ public class TChar extends JPanel implements ActionListener {
 		// Receive APDU from card containing a response
 		// Process response
 		// Show response on terminal
-		
+
 		CommandAPDU readCommand = new CommandAPDU((int)PRFE_CLA, (int) READ_INS, (int)TERMINAL_TYPE, (int)TERMINAL_SOFTWARE_VERSION);
-		
+
 		ResponseAPDU response = card.transmit(readCommand);
-		
+
 		byte[] responseBytes = response.getBytes();
 	}
 
@@ -175,9 +176,9 @@ public class TChar extends JPanel implements ActionListener {
 		// Requires authenticateCardAndBuyer()
 		// new_amount = old_amount + quota
 		CommandAPDU chargeCommand = new CommandAPDU((int)PRFE_CLA, (int) CHAR_INS);
-		
+
 		ResponseAPDU response = card.transmit(chargeCommand);
-		
+
 		byte[] responseBytes = response.getBytes();
 
 	}
