@@ -5,6 +5,7 @@ import javacard.security.*;
 import javacardx.crypto.*;
 
 
+
 public class CardApplet extends Applet implements ISO7816 {
 private static final byte PRFE_CLA = (byte) 0xB0;
 private static final byte CARD_SOFTWARE_VERSION = 0x0;
@@ -58,6 +59,7 @@ private static final short AES_KEY_LENGTH = 16;
 private static final short SIGN_LENGTH = 16;
 private static final short DATE_LENGTH = 4;
 private static final short NONCE_LENGTH = 8;
+private static final short REVOKE_LENGTH = 24; // Sign length + nonce length
 
 private KeyAgreement ECExch;
 private Cipher AESCipher;
@@ -216,26 +218,27 @@ public void process(APDU apdu) throws ISOException, APDUException {
 		 * INS: 0x40 
 		 * P1: Terminal Type
 		 * P2: Terminal Software Version 
-		 * Lc: should be SIGN_LENGTH
+		 * Lc: should be REVOKE_LENGTH
 		 * Data: Signature over the revoke operation
 		 *
 		
 		if (!checkAndCopyTypeAndVersion(buffer)) ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
 		
 		lc_length = apdu.setIncomingAndReceive();
-        if (lc_length < (byte) SIGN_LENGTH) {
-            ISOException.throwIt((short) (SW_WRONG_LENGTH | SIGN_LENGTH));
+        if (lc_length < (byte) REVOKE_LENGTH) {
+            ISOException.throwIt((short) (SW_WRONG_LENGTH | REVOKE_LENGTH));
         }
 		
 		buffer = apdu.getBuffer();
 		
 		if (((status[(short) 0] & 0xff) == 0x01) || ((status[(short) 0] & 0xff) == 0x02) || ((status[(short) 0] & 0xff) == 0x03) ) {
 			tInfo[(short) 1] = buffer[OFFSET_P1];
-			Util.arrayCopyNonAtomic(buffer, OFFSET_INS, sigBuffer, (short) 0, (short) 1);
-			Util.arrayCopyNonAtomic(cID, (short) 0, sigBuffer, (short) 1, (short) 4);
+			Util.arrayCopyNonAtomic(buffer, OFFSET_INS, sigBuffer, (short) 0, (short) 1); // Instruction byte
+			Util.arrayCopyNonAtomic(cID, (short) 0, sigBuffer, (short) 1, (short) 4); // Card ID
+			Util.arrayCopyNonAtomic(buffer, SIGN_LENGTH, sigBuffer, (short) 5, NONCE_LENGTH); // Nonce
 			
 			
-			if (!verify(sigBuffer,(short) 0,(short) 5 ,buffer, (short) 0, SIGN_LENGTH)) {
+			if (!verify(sigBuffer,(short) 0,(short) 13 ,buffer, (short) 0, SIGN_LENGTH)) {
 				ISOException.throwIt(SW_WRONG_DATA);
 			}
 			else {
@@ -595,6 +598,6 @@ public void process(APDU apdu) throws ISOException, APDUException {
 	 *
 	private void revoke(APDU apdu, byte[] buffer) {
 		
-		status[0] = 0x07; // Card status is now revoked
+		status[(short) 0] = (byte) 0x04; // Card status is now revoked
 	} */
 }
