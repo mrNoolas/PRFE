@@ -321,7 +321,7 @@ public void process(APDU apdu) throws ISOException, APDUException {
     private boolean checkAndCopyTypeAndVersion(byte[] buffer) {
         short type = (short) (buffer[OFFSET_P1] & 0xff);
         boolean plausible = type < (short) 4 || type == (short) 0xff; // The type should at least be in the right numeric range.
-        short s = status[(short) 0] & 0xff;
+        short s = (short) (status[(short) 0] & 0xff);
 
         // Terminal type should stay the same as before, otherwise the authentication fails.
         if ((s != (short) 0xff && s > (short) 3) || (s > (short) 0 && tInfo[(short) 0] != type) || !plausible) return false; 
@@ -382,10 +382,10 @@ public void process(APDU apdu) throws ISOException, APDUException {
     private void checkExpDate(byte[] buff, short offset) {
         // Compare expiration date and the last known valid date: sanity check on dates   
         // Check yymd: compare them as unsigned numbers; if any is lower, the expiration date is invalid. Throws data invalid.
-        if (((short) buff[offset] & 0xff) < ((short) lastKnownTime[(short) 0] & 0xff) 
-                || ((short) buff[(short) (offset + (short) 1)] & 0xff) < ((short) lastknownTime[(short) 1] & 0xff)
-                || ((short) buff[(short) (offset + (short) 2)] & 0xff) < ((short) lastknownTime[(short) 2] & 0xff)
-                || ((short) buff[(short) (offset + (short) 3)] & 0xff) < ((short) lastknownTime[(short) 3] & 0xff) ) {
+        if ((short) (buff[offset] & 0xff) < (short) (lastKnownTime[(short) 0] & 0xff) 
+                || (short) (buff[(short) (offset + (short) 1)] & 0xff) < (short) (lastKnownTime[(short) 1] & 0xff)
+                || (short) (buff[(short) (offset + (short) 2)] & 0xff) < (short) (lastKnownTime[(short) 2] & 0xff)
+                || (short) (buff[(short) (offset + (short) 3)] & 0xff) < (short) (lastKnownTime[(short) 3] & 0xff) ) {
             ISOException.throwIt(SW_DATA_INVALID);
         }
     }
@@ -495,7 +495,7 @@ public void process(APDU apdu) throws ISOException, APDUException {
         Util.arrayCopyNonAtomic(cID, (short) 0, buffer, (short) 16, (short) 4); // card ID
         Util.arrayCopyNonAtomic(nonceC, (short) 0, buffer, (short) 20, NONCE_LENGTH);
         Util.arrayCopyNonAtomic(CCert, (short) 0, buffer, (short) 32, SIGN_LENGTH);
-        Util.arrayCopyNonAtomic(CCertExp, (short 0, buffer, (short) 48, DATE_LENGTH);
+        Util.arrayCopyNonAtomic(CCertExp, (short) 0, buffer, (short) 48, DATE_LENGTH);
 
         signature.init(prkc, Signature.MODE_SIGN);
         signature.sign(buffer, (short) 0, (short) 52, buffer, (short) 52); // signature into buffer
@@ -605,7 +605,7 @@ public void process(APDU apdu) throws ISOException, APDUException {
     private void personalise(APDU apdu, byte[] buffer) {
         buffer = apdu.getBuffer();
         
-        beginTransaction();
+        JCSystem.beginTransaction();
         pukTMan.setW(buffer, PUKTMAN_PERS_OFFSET, EC_KEY_LENGTH);
         pukTChar.setW(buffer, PUKTCHAR_PERS_OFFSET, EC_KEY_LENGTH);
         pukTCons.setW(buffer, PUKTCONS_PERS_OFFSET, EC_KEY_LENGTH);
@@ -623,7 +623,7 @@ public void process(APDU apdu) throws ISOException, APDUException {
         }
 
         pin.update(buffer, PIN_PERS_OFFSET, PIN_SIZE);
-        commitTransaction();
+        JCSystem.commitTransaction();
     }
 
 	/**
