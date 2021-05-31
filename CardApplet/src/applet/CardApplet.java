@@ -58,6 +58,7 @@ private static final short EC_CERT_LENGTH = 20;
 private static final short AES_KEY_LENGTH = 16;
 private static final short SIGN_LENGTH = 16;
 private static final short DATE_LENGTH = 4;
+private static final short TIME_LENGTH = (short) (DATE_LENGTH + (short) 3);
 private static final short NONCE_LENGTH = 8;
 private static final short REVOKE_LENGTH = 24; // Sign length + nonce length
 
@@ -128,6 +129,7 @@ public CardApplet() {
 
     CCert = new byte[SIGN_LENGTH];      // Server certificate verification key
     CCertExp = new byte[DATE_LENGTH];   // Date, yymd
+    lastKnownTime = new byte[TIME_LENGTH]; // Date and time, yymdhms
 
     AESCipher = Cipher.getInstance(Cipher.ALG_AES_BLOCK_128_CBC_NOPAD, false);
     ECExch = KeyAgreement.getInstance(KeyAgreement.ALG_EC_SVDP_DH, false);
@@ -348,6 +350,47 @@ public void process(APDU apdu) throws ISOException, APDUException {
     }
 
     /**
+     * Convenience function for using the signature object.
+     *
+     * Initialises in MODE_VERIFY using the key that fits the type of terminal that is currently selected.
+     * Then it tries to verify the signature and buffer using the terminal key: throws ISOException.SW_SECURITY_STATUS_NOT_SATISFIED exception if signature fails.
+     */
+    private void termVerif (byte[] inBuff, short inOffset, short inLength, byte[] sigBuff, short sigOffset) {
+        switch(tInfo[(short) 0]) { // Switch on terminal type
+            case TERM_TYPE_TMAN:
+                signature.init(pukTMan, Signature.MODE_VERIFY);
+                break;
+            case TERM_TYPE_TCHAR:
+                signature.init(pukTChar, Signature.MODE_VERIFY);
+                break;
+            case TERM_TYPE_TCONS:
+                signature.init(pukTCons, Signature.MODE_VERIFY);
+                break;
+            default: // unsupported type
+                select(); // reset
+                ISOException.throwIt(SW_FUNC_NOT_SUPPORTED);
+                break;
+        }
+        
+        if (!signature.verify(inBuff, inOffset, inLength, sigBuff, sigOffset, SIGN_LENGTH)) {
+            select(); // reset
+            ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
+        }
+    }
+
+
+    private void checkExpDate(byte[] buff, short offset) {
+        // Compare expiration date and the last known valid date: sanity check on dates   
+        // Check yymd: compare them as unsigned numbers; if any is lower, the expiration date is invalid. Throws data invalid.
+        if (((short) buff[offset] & 0xff) < ((short) lastKnownTime[(short) 0] & 0xff) 
+                || ((short) buff[(short) (offset + (short) 1)] & 0xff) < ((short) lastknownTime[(short) 1] & 0xff)
+                || ((short) buff[(short) (offset + (short) 2)] & 0xff) < ((short) lastknownTime[(short) 2] & 0xff)
+                || ((short) buff[(short) (offset + (short) 3)] & 0xff) < ((short) lastknownTime[(short) 3] & 0xff) ) {
+            ISOException.throwIt(SW_DATA_INVALID);
+        }
+    }
+
+    /**
      * Read some general data from the card.
      *
      * Sends card type; card software version; and card ID to the terminal.
@@ -417,25 +460,8 @@ public void process(APDU apdu) throws ISOException, APDUException {
         // Verify the signature over the message
         Util.arrayCopyNonAtomic(tInfo, (short) 0, sigBuffer, (short) 0, (short) 6);
         Util.arrayCopyNonAtomic(buffer, SK_EXCH_PUBLIC_OFFSET, sigBuffer, (short) 6, (short) AES_KEY_LENGTH);
-        switch(tInfo[(short) 0]) { // Switch on terminal type
-            case TERM_TYPE_TMAN:
-                signature.init(pukTMan, Signature.MODE_VERIFY);
-                break;
-            case TERM_TYPE_TCHAR:
-                signature.init(pukTChar, Signature.MODE_VERIFY);
-                break;
-            case TERM_TYPE_TCONS:
-                signature.init(pukTCons, Signature.MODE_VERIFY);
-                break;
-            default: // unsupported type
-                ISOException.throwIt(SW_FUNC_NOT_SUPPORTED);                
-        }
+        termVerif(sigBuffer, (short) 0, (short) ((short) 6 + AES_KEY_LENGTH), buffer, SK_EXCH_SIG1_OFFSET);
         
-        if (!signature.verify(sigBuffer, (short) 0, (short) ((short) 6 + AES_KEY_LENGTH), buffer, SK_EXCH_SIG1_OFFSET, SIGN_LENGTH)) {
-            select(); // reset
-            ISOException.throwIt(SW_WRONG_DATA);
-        }
-
         // Generate our part of the session key.
         keyExchangeKP.genKeyPair();
         ECExch.init(keyExchangeKP.getPrivate());
@@ -460,6 +486,7 @@ public void process(APDU apdu) throws ISOException, APDUException {
          *      CCertExp (4 bytes)
          *      card message signature (16 bytes)
          */
+        apdu.setOutgoing();
         apdu.setOutgoingLength(AUTH1_RESP_LEN);
 
         ((ECPublicKey) keyExchangeKP.getPublic()).getW(buffer, (short) 0); // first copy the public key exchange part
@@ -519,25 +546,7 @@ public void process(APDU apdu) throws ISOException, APDUException {
         // Verify the signature over the message
         Util.arrayCopyNonAtomic(tInfo, (short) 0, sigBuffer, (short) 0, (short) 6);
         Util.arrayCopyNonAtomic(buffer, (short) 4, sigBuffer, (short) 6, (short) 36);
-        switch(tInfo[(short) 0]) { // Switch on card type
-            case TERM_TYPE_TMAN:
-                signature.init(pukTMan, Signature.MODE_VERIFY);
-                break;
-            case TERM_TYPE_TCHAR:
-                signature.init(pukTChar, Signature.MODE_VERIFY);
-                break;
-            case TERM_TYPE_TCONS:
-                signature.init(pukTCons, Signature.MODE_VERIFY);
-                break;
-            default: // unsupported type
-                select(); //reset
-                ISOException.throwIt(SW_FUNC_NOT_SUPPORTED);                
-        }
-        
-        if (!signature.verify(sigBuffer, (short) 0, (short) 42, buffer, (short) 40, SIGN_LENGTH)) {
-            select(); // reset
-            ISOException.throwIt(SW_WRONG_DATA);
-        }
+        termVerif(sigBuffer, (short) 0, (short) 42, buffer, (short) 40);
 
         incNonce(nonceC);
         if (Util.arrayCompare(nonceC, (short) 0, buffer, (short) 12, NONCE_LENGTH) != (byte) 0) {
@@ -548,16 +557,43 @@ public void process(APDU apdu) throws ISOException, APDUException {
         // All checks are done, now get the terminal nonce and verify the terminal certificate
         Util.arrayCopyNonAtomic(buffer, (short) 4, nonceT, (short) 0, NONCE_LENGTH);
 
-        // TODO: copy TCert details into sigBuffer and verify signature. If it verifies, terminal is authenticated, so positive response can be returned :)
+        // Compare expiration date and the last known valid date: sanity check on dates   
+        checkExpDate(buffer, (short) 36);
 
-        /*
+        // copy TCert details into sigBuffer and verify signature. If it verifies, terminal is authenticated, so positive response can be returned :)
+        Util.arrayCopyNonAtomic(tInfo, (short) 2, sigBuffer, (short) 0, (short) 4); // terminal ID
+        sigBuffer[(short) 4] = tInfo[(short) 0]; // terminal type
+        Util.arrayCopyNonAtomic(buffer, (short) 36, sigBuffer, (short) 5, (short) 4); // Expiration date of the certificate 
+
         signature.init(puks, Signature.MODE_VERIFY);
-        if (!signature.verify(buffer, (short) 20, () {
-            select();
+        
+        if (!signature.verify(sigBuffer, (short) 0, (short) 9, buffer, (short) 20, SIGN_LENGTH)) {
+            select(); // reset
             ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
         }
-        */
+
+        switch(tInfo[(short) 0]) {
+            case TERM_TYPE_TMAN:
+                status[(short) 0] = (byte) 0x01;
+                break;
+            case TERM_TYPE_TCHAR:
+                status[(short) 0] = (byte) 0x02;
+                break;
+            case TERM_TYPE_TCONS:
+                status[(short) 0] = (byte) 0x03;
+                break;
+            default:
+                select(); // reset
+                ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
+                break;
+        }
+
+        // return terminal nonce (incremented and encrypted) to confirm authentication successful.
+        incNonce(nonceT);
+        AESCipher.init(skey, Cipher.MODE_ENCRYPT);
+        AESCipher.doFinal(nonceT, (short) 0, NONCE_LENGTH, buffer, (short) 0); // nonce is 8 bytes, so exactly one AES block of 64 bits
         
+        apdu.setOutgoingAndSend((short) 0, (short) NONCE_LENGTH);
     }
 
     /**
