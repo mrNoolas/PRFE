@@ -18,8 +18,8 @@ all: applet TManTerminal TCharTerminal TConsTerminal TMan TChar TCons
 
 applet: CardApplet/bin/CardApplet.class
 
-	CardApplet/bin/CardApplet.class: CardApplet/src/applet/CardApplet.java
-		javac -d CardApplet/bin -cp ${JC_CLASSPATH}:TMan/src CardApplet/src/applet/CardApplet.java
+CardApplet/bin/CardApplet.class: CardApplet/src/applet/CardApplet.java
+	javac -d CardApplet/bin -cp ${JC_CLASSPATH}:TMan/src CardApplet/src/applet/CardApplet.java
 
 CardQuickTest: CardApplet/bin/QuickTest.class
 
