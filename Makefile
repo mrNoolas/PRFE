@@ -26,7 +26,7 @@ CardQuickTest: CardApplet/bin/QuickTest.class
 CardApplet/bin/QuickTest.class: CardApplet/src/applet/QuickTest.java
 	javac -d CardApplet/bin -cp ${JC_HOME}:util/jcardsim/${JCARDSIM}.jar:CardApplet/bin CardApplet/src/applet/QuickTest.java
 
-runCardQuickTest:
+runCardQuickTest: CardQuickTest
 	java -cp util/jcardsim/${JCARDSIM}.jar:CardApplet/bin terminal.QuickTest
 
 

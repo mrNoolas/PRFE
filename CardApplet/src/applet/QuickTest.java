@@ -67,8 +67,8 @@ public class QuickTest {
 
 
       // READ
-      byte data[] = {0};
-      command = new CommandAPDU(176, 0, 0, 01020304, data, 0);
+      byte data[] = {1, 2, 3, 4, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16};
+      command = new CommandAPDU(176, 0, 0, 01020304, data, 32);
       System.out.println("Command APDU: " + command.toString());
       System.out.println("Raw content of the command: " + toHexString(command.getBytes()));
 
