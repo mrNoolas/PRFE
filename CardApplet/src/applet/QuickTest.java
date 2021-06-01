@@ -67,8 +67,13 @@ public class QuickTest {
 
 
       // READ
-      byte data[] = {1, 2, 3, 4, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16};
-      command = new CommandAPDU(176, 0, 0, 01020304, data, 32);
+      byte DATA[] = {1, 2, 3, 4, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16};
+      byte CLA    = (byte) 0xB0;
+      byte INS    = (byte) 0; //Instruction read 0x00
+      byte TType  = (byte) 1; //Terminal type Card = 0x00, MAN = 0x01, CHAR = 0x02, CONS = 0x03
+      byte TSV    = (byte) 1234; //Terminal Software Version
+      byte LEN    = (byte) 8; //Length of the response
+      command = new CommandAPDU(CLA, INS, TType, TSV, DATA, LEN);
       System.out.println("Command APDU: " + command.toString());
       System.out.println("Raw content of the command: " + toHexString(command.getBytes()));
 
