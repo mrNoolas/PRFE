@@ -80,6 +80,8 @@ public class TChar extends JPanel implements ActionListener {
     private static final byte AUTH_INS = (byte) 0x10;
     private static final byte CHAR_INS = (byte) 0x20;
     private static final byte REV_INS  = (byte) 0x40;
+	
+	private short monthlyQuota;
 
 
     //private JavaxSmartCardInterface simulatorInterface; // SIM
@@ -121,7 +123,7 @@ public class TChar extends JPanel implements ActionListener {
 		TCert     = null;
 		
 		tID = new byte[TID_LENGTH];
-
+		monthlyQuota = 1;
 
 
 
@@ -187,9 +189,19 @@ public class TChar extends JPanel implements ActionListener {
 		// new_amount = old_amount + quota
 		
 		
-		CommandAPDU chargeCommand = new CommandAPDU((int)PRFE_CLA, (int) CHAR_INS, (int) 0, (int) 0);
+		CommandAPDU chargeCommand = new CommandAPDU((int)PRFE_CLA, (int) CHAR_INS, (int) TERMINAL_TYPE, (int) TERMINAL_SOFTWARE_VERSION);
 		ResponseAPDU response = applet.transmit(chargeCommand);
 		byte[] responseBytes = response.getBytes();
+		byte[] data = response.getData();
+		
+		 
+		short petrolCredit = data[(short) 0];
+		petrolCredit = (short) petrolCredit + (short) monthlyQuota;
+		CommandAPDU chargeCommand = new CommandAPDU((int)PRFE_CLA, (int) CHAR_INS, (short) monthlyQuota, (int) 0;
+		ResponseAPDU response = applet.transmit(chargeCommand); 
+		
+		
+		
 		
 	}
 	

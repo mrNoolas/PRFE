@@ -21,6 +21,7 @@ private static final short PERS_INC_LEN = 205;
 private static final short READ_INC_LEN = 4;
 private static final short AUTH1_INC_LEN = 200; // TODO update this
 private static final short AUTH2_INC_LEN = 200; // TODO update this
+private static final short REVOKE_INC_LENGTH = 24; // Sign length + nonce length
 
 // Response lenghts
 private static final short READ_RESP_LEN = 8;
@@ -60,7 +61,7 @@ private static final short SIGN_LENGTH = 16;
 private static final short DATE_LENGTH = 4;
 private static final short TIME_LENGTH = (short) (DATE_LENGTH + (short) 3);
 private static final short NONCE_LENGTH = 8;
-private static final short REVOKE_LENGTH = 24; // Sign length + nonce length
+
 
 private KeyAgreement ECExch;
 private Cipher AESCipher;
@@ -207,7 +208,28 @@ public void process(APDU apdu) throws ISOException, APDUException {
         }
         break;
     case 0x20:
-        //charge
+        /* charge
+		 * 
+		 * This instruction can be executed at an authenticated charging terminal
+		 * 
+		 * INS: 0x20
+		 * P1: Terminal Type
+		 * P2: Terminal Software Version
+		 * LC: 0
+		 * Data: 
+		 
+		if ((status[(short) 0] & 0xff) == 0x02) {
+		 
+			lc_length = apdu.setIncomingAndReceive();
+			if (lc_length != 0) {
+				ISOException.throwIt((short) (SW_WRONG_LENGTH | 0));
+			}
+		
+			
+			
+		}
+		
+		*/
         break;
     case 0x30:
         //consume
@@ -220,7 +242,7 @@ public void process(APDU apdu) throws ISOException, APDUException {
 		 * INS: 0x40 
 		 * P1: Terminal Type
 		 * P2: Terminal Software Version 
-		 * Lc: should be REVOKE_LENGTH
+		 * Lc: should be REVOKE_INC_LENGTH
 		 * Data: Signature over the revoke operation
 		 *
 		
@@ -228,7 +250,7 @@ public void process(APDU apdu) throws ISOException, APDUException {
 		
 		lc_length = apdu.setIncomingAndReceive();
         if (lc_length < (byte) REVOKE_LENGTH) {
-            ISOException.throwIt((short) (SW_WRONG_LENGTH | REVOKE_LENGTH));
+            ISOException.throwIt((short) (SW_WRONG_LENGTH | REVOKE_INC_LENGTH));
         }
 		
 		buffer = apdu.getBuffer();
