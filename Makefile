@@ -47,7 +47,7 @@ TMan/bin/terminal/TMan.class: TMan/src/terminal/TMan.java
 
 runTManTerminal:
 	# Runs the GUI terminal
-	java -cp util/jcardsim/${JCARDSIM}.jar:TMan/bin:CardApplet/bin terminal.TMan
+	java -Djdk.sunec.disableNative=false -cp util/jcardsim/${JCARDSIM}.jar:TMan/bin:CardApplet/bin terminal.TMan
 
 
 # ===== TCons =====

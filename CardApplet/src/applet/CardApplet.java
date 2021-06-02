@@ -19,7 +19,7 @@ private static final short MAX_PETROL_CREDITS = (short) 10000;
 // Incoming expected data block lengths
 private static final short PERS_INC_LEN = 205;
 private static final short READ_INC_LEN = 4;
-private static final short AUTH1_INC_LEN = 200; // TODO update this
+private static final short AUTH1_INC_LEN = 53; 
 private static final short AUTH2_INC_LEN = 200; // TODO update this
 private static final short REVOKE_INC_LENGTH = 24; // Sign length + nonce length
 
@@ -111,7 +111,7 @@ public CardApplet() {
     pin = new OwnerPIN(PIN_TRY_LIMIT, PIN_SIZE);
 
     status = JCSystem.makeTransientByteArray((short) 1, JCSystem.CLEAR_ON_RESET);  
-    keyExchBuffer = JCSystem.makeTransientByteArray((short) 16, JCSystem.CLEAR_ON_RESET);
+    keyExchBuffer = JCSystem.makeTransientByteArray((short) 20, JCSystem.CLEAR_ON_RESET);
     sigBuffer = JCSystem.makeTransientByteArray((short) 30, JCSystem.CLEAR_ON_RESET);
     nonceC = JCSystem.makeTransientByteArray((short) NONCE_LENGTH, JCSystem.CLEAR_ON_RESET);
     nonceT = JCSystem.makeTransientByteArray((short) NONCE_LENGTH, JCSystem.CLEAR_ON_RESET);
@@ -138,7 +138,7 @@ public CardApplet() {
     random = RandomData.getInstance(RandomData.ALG_SECURE_RANDOM);
 
     cID = new byte[4];
-    cID = new byte[] {(byte) 0xde, (byte) 0xad, (byte) 0xbe, (byte) 0xef}; 
+    cID = new byte[] {(byte) 0xde, (byte) 0xad, (byte) 0xbe, (byte) 0xef}; // TODO: remove this test-data and use only personalise
     tInfo = JCSystem.makeTransientByteArray((short) 6, JCSystem.CLEAR_ON_RESET);
     
     petrolCredits = (short) 1;
@@ -466,30 +466,30 @@ public void process(APDU apdu) throws ISOException, APDUException {
      * Lc: 
      * Data 2.0:
      *      4 bytes Terminal ID
-     *      Public key exchange component, skeyT
-     *      Signature over P1, P2, TID and skeyT with prkT
+     *      16 bytes Public key exchange component, skeyT
+     *      16 Signature over P1, P2, TID and skeyT with prkT
      */ 
 
     private void authenticatePhase1 (APDU apdu, byte[] buffer) {
         // First get and check the length of the data buffer:
         short lc_length = apdu.setIncomingAndReceive();
-        if (lc_length < (byte) AUTH1_INC_LEN) {
-            ISOException.throwIt((short) (SW_WRONG_LENGTH | AUTH1_INC_LEN));
-        }
+        //if (lc_length < (byte) AUTH1_INC_LEN) {
+        //    ISOException.throwIt((short) (SW_WRONG_LENGTH | AUTH1_INC_LEN));
+        //}
 
         buffer = apdu.getBuffer();
-        Util.arrayCopyNonAtomic(buffer, (short) 0, tInfo, (short) 2, (short) 4); 
+        Util.arrayCopyNonAtomic(buffer, (short) 5, tInfo, (short) 2, (short) 4); 
 
-        // Verify the signature over the message
+        // Verify the signature over the message TODO: fix offsets and lengths
         Util.arrayCopyNonAtomic(tInfo, (short) 0, sigBuffer, (short) 0, (short) 6);
         Util.arrayCopyNonAtomic(buffer, SK_EXCH_PUBLIC_OFFSET, sigBuffer, (short) 6, (short) AES_KEY_LENGTH);
-        termVerif(sigBuffer, (short) 0, (short) ((short) 6 + AES_KEY_LENGTH), buffer, SK_EXCH_SIG1_OFFSET);
+        //termVerif(sigBuffer, (short) 0, (short) ((short) 6 + AES_KEY_LENGTH), buffer, SK_EXCH_SIG1_OFFSET); TODO: reenable this; NOTE: keys may not be available during personalisation
         
         // Generate our part of the session key.
         keyExchangeKP.genKeyPair();
         ECExch.init(keyExchangeKP.getPrivate());
-        ECExch.generateSecret(buffer, SK_EXCH_PUBLIC_OFFSET, AES_KEY_LENGTH, keyExchBuffer, (short) 0);
-
+        ECExch.generateSecret(buffer, (short) 9, (short) 33, keyExchBuffer, (short) 0);
+        
         // Convert keyExchBuffer to skey
         skey.setKey(keyExchBuffer, (short) 0);
 
@@ -500,7 +500,7 @@ public void process(APDU apdu) throws ISOException, APDUException {
          *  Prepare response 
          *
          *  Contents:
-         *  skeyC (16 bytes)
+         *  skeyC (33 bytes)
          *
          *  encrypted:
          *      cardID (4 bytes) // padding to get to multiple of 64 bits aes block length
@@ -514,17 +514,20 @@ public void process(APDU apdu) throws ISOException, APDUException {
 
         ((ECPublicKey) keyExchangeKP.getPublic()).getW(buffer, (short) 0); // first copy the public key exchange part
         
-        // Prepare the encryption buffer
-        Util.arrayCopyNonAtomic(cID, (short) 0, buffer, (short) 16, (short) 4); // card ID
-        Util.arrayCopyNonAtomic(nonceC, (short) 0, buffer, (short) 20, NONCE_LENGTH);
-        Util.arrayCopyNonAtomic(CCert, (short) 0, buffer, (short) 32, SIGN_LENGTH);
-        Util.arrayCopyNonAtomic(CCertExp, (short) 0, buffer, (short) 48, DATE_LENGTH);
+        // Prepare the encryption buffer TODO: check offsets
+        Util.arrayCopyNonAtomic(cID, (short) 0, buffer, (short) 33, (short) 4); // card ID
+        Util.arrayCopyNonAtomic(nonceC, (short) 0, buffer, (short) 37, NONCE_LENGTH);
+        Util.arrayCopyNonAtomic(CCert, (short) 0, buffer, (short) 49, SIGN_LENGTH);
+        Util.arrayCopyNonAtomic(CCertExp, (short) 0, buffer, (short) 65, DATE_LENGTH);
 
-        signature.init(prkc, Signature.MODE_SIGN);
-        signature.sign(buffer, (short) 0, (short) 52, buffer, (short) 52); // signature into buffer
+        // only try this if prkc is initialised (authenticate may be called before personalisation phase
+        if (prkc.isInitialized()) {
+            signature.init(prkc, Signature.MODE_SIGN);
+            System.out.printf("%d\n", signature.sign(buffer, (short) 0, (short) 52, buffer, (short) 52)); // signature into buffer
+        }
 
         AESCipher.init(skey, Cipher.MODE_ENCRYPT);
-        AESCipher.doFinal(buffer, (short) 16, (short) 48, buffer, (short) 16); // encrypt in 4 blocks
+        AESCipher.doFinal(buffer, (short) 33, (short) 48, buffer, (short) 33); // encrypt in 4 blocks
 
         status[(short) 0] = (byte) 0x0f;
         apdu.sendBytes((short) 0, AUTH1_RESP_LEN);
