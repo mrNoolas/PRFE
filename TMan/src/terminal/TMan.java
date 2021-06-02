@@ -357,7 +357,11 @@ public class TMan extends JPanel implements ActionListener {
             Object src = ae.getSource();
             if (src instanceof JButton) {
                 char c = ((JButton) src).getText().charAt(0);
-                setText(sendKey((byte) c));
+                if (c == 'R') {
+                    setText(readCard());
+                } else {
+                    setText(sendKey((byte) c));
+                }
             }
         } catch (Exception e) {
             System.out.println(MSG_ERROR);
@@ -370,7 +374,7 @@ public class TMan extends JPanel implements ActionListener {
         }
     }
     
-    public short readCard() {                                                 //default method, read information on card
+    public int readCard() {                                                 //default method, read information on card
         //construct a commandAPDU with the INS byte for read and the terminal info
         CommandAPDU readCommand = new CommandAPDU(PRFE_CLA, READ_INS, T_TYPE, T_SOFT_VERSION, T_ID, 0, ID_LENGTH, 8);
 
@@ -407,7 +411,7 @@ public class TMan extends JPanel implements ActionListener {
 
         System.out.printf("Read response from Card: Type: %x; Soft Vers: %x; ID: %x%x%x%x; Petrolquota: %x \n", 
                 cardType, cardSoftVers, cardID[0], cardID[1], cardID[2], cardID[3], petrolQuota);
-        return petrolQuota;
+        return (int) petrolQuota;
     }
 
     public ResponseAPDU sendKey(byte ins) {
