@@ -233,10 +233,74 @@ public void process(APDU apdu) throws ISOException, APDUException {
 		*/
         break;
     case 0x30:
-        //consume
+        /** CONSUME instruction
+        *
+        * This instruction can be executed at authenticated TCons
+        *
+        * INS: 0x30
+        * P1: Terminal Type
+        * P2: Terminal Software Version
+        * Lc: CONSUME_INC_LENGTH
+        * Data: encryption of NonceT
+        */
+
+        if(!checkAndCopyTypeAndVersion(buffer)) ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
+       // if(tInfo[0] != TERM_TYPE_TCONS) ISOException.throwIt()
+
+        lc_length = apdu.setIncomingAndReceive();
+        if (lc_length < (byte) CONSUME_LENGTH) {
+            ISOException.throwIt((short) (SW_WRONG_LENGTH | CONSUME_INC_LENGTH));
+        }
+
+        buffer = apdu.getBuffer();
+
+        // Decrypt into nonceT
+        AESCipher.init(skey, Cipher.MODE_DECRYPT);
+        AESCipher.doFinal(buffer, (short) 0, (short) 8, nonceT, (short) 0);
+
+        /*card sends back to the terminal:
+        card-id (4 bytes), petrolcredits (short), mac(hash{card-id, petrolCredits, incNonce(nonceT)}, skey)
+        -> signature using ALG_AES_MAC_128?: would generate a 16 byte MAC
+
+        nonceC = incNonce(nonceT);
+        hashedData = hash(card-id, petrolCredits, nonceC) -> hashing algorithm? SHA-1?
+
+        //copy data to be hashed and signed into a new array
+        byte[] dataToHash = JCSystem.makeTransientByteArray((short) 14, JCSystem.CLEAR_ON_RESET);
+        Util.arrayCopyNonAtomic(cID, (short) 0, dataToHash, (short) 2, (short) 4);
+        Util.setShort(dataToHash, (short) 4, petrolCredits);
+        Util.arrayCopyNonAtomic(nonceC, (short) 0, dataToHash, (short) 6, (short) NONCE_LENGTH);
+
+        //hash the data with hashing algorithm
+        MessageDigest md = MessageDigest.getInstance("SHA-256"); // TODO: hash algorithm?
+        byte[] hashedData = md.doFinal(dataToHash);
+
+        //construct mac and sign data
+        mac = Signature.getInstance(MessageDigest.ALG_NULL, SIG_CIPHER_AES_CMAC_128, Cipher.PAD_ISO9797_M2);
+        mac.init(skey, MODE_SIGN);
+        byte[] signedData = mac.sign(hashedData); (should be 16 bytes?) so the total length of the data to send is 4+2+16 = 22 bytes of data
+
+        short expectedLength = apdu.setOutgoing();
+
+        if (expectedLength < (short) CONSUME_RESP_LEN) ISOException.throwIt((short) (SW_WRONG_LENGTH | CONSUME_RESP_LEN));
+
+        // Return answer with the given data:
+        apdu.setOutgoingLength((byte) CONSUME_RESP_LEN);
+
+        buffer[(short) 0] = (byte) CARD_TYPE;
+        buffer[(short) 1] = (byte) CARD_SOFTWARE_VERSION;
+        Util.arrayCopyNonAtomic(cID, (short) 0, buffer, (short) 2, (short) 4);
+        Util.setShort(buffer, (short) 6, petrolCredits);
+        Util.arrayCopyNonAtomic(signedData, (short) 0, buffer, (short) 8, (short) 16);
+
+        apdu.sendBytes((short) 0, (short) CONSUME_RESP_LEN);
+         */
+
+
+
         break;
     case 0x40:
-        /* REVOKE instruction: 
+        /* REVOKE instruction:
 		 * 
 		 * This instruction can be executed at any authenticated terminal.
 		 *
