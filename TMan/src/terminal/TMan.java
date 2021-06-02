@@ -17,6 +17,8 @@ import java.awt.event.ActionListener;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.util.List;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 
 import javax.smartcardio.Card;
 import javax.smartcardio.CardChannel;
@@ -56,26 +58,40 @@ public class TMan extends JPanel implements ActionListener {
     //private JavaxSmartCardInterface simulatorInterface; // SIM
 
     private static final long serialVersionUID = 1L;
-    static final String TITLE = "Calculator";
+    static final String TITLE = "Management Terminal";
     static final Font FONT = new Font("Monospaced", Font.BOLD, 24);
-    static final Dimension PREFERRED_SIZE = new Dimension(300, 300);
+    static final Dimension PREFERRED_SIZE = new Dimension(1500, 300);
 
-    static final int DISPLAY_WIDTH = 20;
+    static final int DISPLAY_WIDTH = 100;
     static final String MSG_ERROR = "    -- error --     ";
     static final String MSG_DISABLED = " -- insert card --  ";
     static final String MSG_INVALID = " -- invalid card -- ";
 
-    static final byte[] CALC_APPLET_AID = { (byte) 0x3B, (byte) 0x29,
-            (byte) 0x63, (byte) 0x61, (byte) 0x6C, (byte) 0x63, (byte) 0x01 };
+    static final byte[] CALC_APPLET_AID = { (byte) 0x3B, (byte) 0x29, (byte) 0x63, (byte) 0x61, (byte) 0x6C, (byte) 0x63, (byte) 0x01 };
     static final String CALC_APPLET_AID_string = "3B2963616C6301";
 
-    static final CommandAPDU SELECT_APDU = new CommandAPDU(
-    		(byte) 0x00, (byte) 0xA4, (byte) 0x04, (byte) 0x00, CALC_APPLET_AID);
+    static final CommandAPDU SELECT_APDU = new CommandAPDU((byte) 0x00, (byte) 0xA4, (byte) 0x04, (byte) 0x00, CALC_APPLET_AID);
 
     JTextField display;
     JPanel keypad;
 
     CardChannel applet;
+
+    // General constants
+    private static final byte PRFE_CLA = (byte) 0xb0;
+    private static final byte READ_INS = (byte) 0x00;
+    private static final byte AUTH_INS = (byte) 0x10;
+
+    // length constants
+    private static final short ID_LENGTH = 4;
+    private static final short NONCE_LENGTH = 8;
+    private static final short AES_KEY_LENGTH = 16;
+
+    // Data about this terminal:
+    private static final byte T_TYPE = (byte) 0x01;
+    private static final byte T_SOFT_VERSION = (byte) 0x00;
+    private static final byte[] T_ID = {(byte) 0x01, (byte) 0x01, (byte) 0x01, (byte) 0x01};
+
 
     // keys
     private ECPrivateKey prkTMan;     // private key TMan
@@ -149,7 +165,7 @@ public class TMan extends JPanel implements ActionListener {
         key(null);
         key(null);
         key("C");
-        key("7");
+        key("Read");
         key("8");
         key("9");
         key(":");
@@ -326,7 +342,9 @@ public class TMan extends JPanel implements ActionListener {
     	    if (resp.getSW() != 0x9000) {
     	      throw new Exception("Select failed");
     	    }
-    	    setText(sendKey((byte) '='));
+    	    //setText(sendKey((byte) '='));
+            System.out.println("Reading card now:");
+            setText(readCard());
     	    setEnabled(true);
           } catch (Exception e) {
               System.err.println("Card status problem!");
@@ -350,6 +368,46 @@ public class TMan extends JPanel implements ActionListener {
         public void windowClosing(WindowEvent we) {
             System.exit(0);
         }
+    }
+    
+    public short readCard() {                                                 //default method, read information on card
+        //construct a commandAPDU with the INS byte for read and the terminal info
+        CommandAPDU readCommand = new CommandAPDU(PRFE_CLA, READ_INS, T_TYPE, T_SOFT_VERSION, T_ID, 0, ID_LENGTH, 8);
+
+        ResponseAPDU response;
+        try {
+            //card sends back apdu with the data after transmitting the commandAPDU to the card
+            response = applet.transmit(readCommand);
+        } catch (CardException e) {
+            // TODO: do something with the exception
+            System.out.println(e);
+            return 0;
+        }
+
+
+        /* 
+         * process the response apdu
+         *
+         * data:
+         *  1 byte card type
+         *  1 byte card software version
+         *  4 bytes card ID
+         *  2 bytes petrolcredits
+         */
+        byte[] responseBytes = response.getBytes();
+        byte[] data = response.getData(); 
+
+        byte cardType = data[0];
+        byte cardSoftVers = data[1];
+
+        byte[] cardID = new byte[4];
+        Util.arrayCopy(data, (short) 2, cardID, (short) 0, (short) 4);
+
+        short petrolQuota = Util.getShort(data, (short) 6);
+
+        System.out.printf("Read response from Card: Type: %x; Soft Vers: %x; ID: %x%x%x%x; Petrolquota: %x \n", 
+                cardType, cardSoftVers, cardID[0], cardID[1], cardID[2], cardID[3], petrolQuota);
+        return petrolQuota;
     }
 
     public ResponseAPDU sendKey(byte ins) {

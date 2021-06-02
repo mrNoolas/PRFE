@@ -138,9 +138,10 @@ public CardApplet() {
     random = RandomData.getInstance(RandomData.ALG_SECURE_RANDOM);
 
     cID = new byte[4];
+    cID = new byte[] {(byte) 0xde, (byte) 0xad, (byte) 0xbe, (byte) 0xef}; 
     tInfo = JCSystem.makeTransientByteArray((short) 6, JCSystem.CLEAR_ON_RESET);
     
-    petrolCredits = (short) 0;
+    petrolCredits = (short) 1;
 
     /*xy = JCSystem.makeTransientShortArray((short) 2, JCSystem.CLEAR_ON_RESET);
     lastOp = JCSystem.makeTransientByteArray((short) 1, JCSystem.CLEAR_ON_RESET);
