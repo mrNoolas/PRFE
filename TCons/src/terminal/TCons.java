@@ -54,8 +54,6 @@ import applet.CardApplet;
 public class TCons extends JPanel implements ActionListener {
 
     private byte[] tID;                    // ID of the terminal
-    private byte[] Sver;                   // Software version of the Terminal
-
     private byte TERMINAL_SOFTWARE_VERSION;
 
     private static final byte TERMINAL_TYPE = (byte) 0x3;
@@ -74,7 +72,7 @@ public class TCons extends JPanel implements ActionListener {
 
     //length constants
     private static final short TID_LENGTH     = 4;
-    private static final short NONCET_LENGTH  = 4;
+    private static final short NONCET_LENGTH  = 8;
     private static final short AES_KEY_LENGTH = 16;
 
 
@@ -151,13 +149,7 @@ public class TCons extends JPanel implements ActionListener {
         byte[] data = response.getData(); //data for read command is the card id and the petrol credits?
         byte[] cardID = new byte[4];
         Util.arrayCopy(data, (short) 0, cardID, (short) 0, (short) 4);
-
-        ByteBuffer bb = ByteBuffer.allocate(2);
-        bb.order(ByteOrder.LITTLE_ENDIAN);
-        bb.put(data[4]);
-        bb.put(data[5]);
-        short petrolQuota = bb.getShort(0);
-
+        short petrolCredits = Util.getShort(data, (short) 4);
     };
 
     public byte[] getCardData(ResponseAPDU response){
@@ -180,7 +172,7 @@ public class TCons extends JPanel implements ActionListener {
 
     public void authenticateCard(){                                                         //authenticate card before we perform any transactions
         //generate nonceT
-        byte[] nonceT = generateNonce();
+       // byte[] nonceT = generateNonce();
         //data to be sent in the apdu: tID, skeyT, sign({tID, skeyT}, prkTCons)
         //tID (= 4 bytes) + skeyT (= 16 bytes), sign tID and skeyT with prkTCons
 
@@ -203,8 +195,12 @@ public class TCons extends JPanel implements ActionListener {
         CommandAPDU authenticateCommand = new CommandAPDU((byte) PRFE_CLA, (byte)AUTH_INS, (byte)TERMINAL_TYPE,
                 (byte)TERMINAL_SOFTWARE_VERSION, message);
         ResponseAPDU response = applet.transmit(authenticateCommand);
-        //the data from the card should be encrypted -> decrypt with skey, which is skeyC + secret component of skeyT
-        byte[] cardData = response.getData();
+        //response data: -> response is length 80?
+        //enc(sign({cID, nonceC, CCert, CCertExp}, pukc), skey);
+        //decrypt with skey
+        byte[] cardData = decryptAES(response.getData(), skey);
+        signature.init(pukc, Signature.MODE_VERIFY);
+        signature.verify(cardData);
 
 
         //TODO: process data from card, decrypt, and verify CCert
@@ -213,6 +209,8 @@ public class TCons extends JPanel implements ActionListener {
         //response from card contains CCert, which needs to be verified using puks
         //if CCert does not verify, send reset to card.
         //if card is authenticated, authenticate terminal.
+
+
         return;
     };
 
@@ -287,8 +285,9 @@ public class TCons extends JPanel implements ActionListener {
         return macResult;
     };
 
-    public boolean verify(byte[] signature, byte[] key){
-        //TODO: verification of signature using EC
+    public boolean verify(byte[] signedData, byte[] key){
+        signature.init(key, Signature.MODE_VERIFY);
+        signature.verify(signedData);
         return true;
     };
 
@@ -299,11 +298,11 @@ public class TCons extends JPanel implements ActionListener {
         return encryptedData;
     }
 
-    public byte[] decryptAES(byte[] encryptedMessage){
-//        Cipher cipher = Cipher.getInstance("AES/ECB/PKCS5PADDING");
-//        cipher.init(Cipher.DECRYPT_MODE, key);
-//        byte[] decryptedMessage = cipher.doFinal(encryptedMessage);
-//        return decryptedMessage;
+    public byte[] decryptAES(byte[] encryptedMessage, AESKey key){
+        Cipher cipher = Cipher.getInstance("AES/ECB/PKCS5PADDING");
+        cipher.init(Cipher.DECRYPT_MODE, key);
+        byte[] decryptedMessage = cipher.doFinal(encryptedMessage);
+        return decryptedMessage;
     }
 
 
