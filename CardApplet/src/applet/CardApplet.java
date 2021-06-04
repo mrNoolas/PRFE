@@ -17,7 +17,8 @@ private static final byte PIN_SIZE = (byte) 6;
 private static final short MAX_PETROL_CREDITS = (short) 10000;
 
 // Incoming expected data block lengths
-private static final short PERS_INC_LEN = 205;
+private static final short PERS_INC_LEN0 = 228;
+private static final short PERS_INC_LEN1 = 132;
 private static final short READ_INC_LEN = 4;
 private static final short AUTH1_INC_LEN = 53; 
 private static final short AUTH2_INC_LEN = 200; // TODO update this
@@ -38,26 +39,28 @@ private ECPublicKey pukTChar;   // public key TChar
 private ECPublicKey pukTCons;   // public key TCons
 private ECPublicKey pukc;       // public key Card
 private ECPrivateKey prkc;       // private key Card
-private ECPublicKey purkc;      // private rekey Card
+private ECPublicKey purkc;      // public rekey Card
 private ECPublicKey puks;       // Server certificate verification key
 private KeyPair keyExchangeKP;  // Used for generating new random keys for a key exchange. Resulting key is used as AES session key.
 private byte[] CCert;           // Server certificate
 private byte[] CCertExp;       // Expiration date of the certificate
 
 // Key offsets in personalisation messages:
-private static final short PUKTMAN_PERS_OFFSET = 0;
-private static final short PUKTCHAR_PERS_OFFSET = 25;
-private static final short PUKTCONS_PERS_OFFSET = 50;
-private static final short PUKC_PERS_OFFSET = 75;
-private static final short PRKC_PERS_OFFSET = 100;
-private static final short PURKC_PERS_OFFSET = 125;
-private static final short PUKS_PERS_OFFSET = 150;
-private static final short CCERT_PERS_OFFSET = 175;
-private static final short CCERT_EXP_PERS_OFFSET = 195;
-private static final short PIN_PERS_OFFSET = 199;
+private static final short PUKTMAN_PERS_OFFSET = 5;
+private static final short PUKTCHAR_PERS_OFFSET = 56;
+private static final short PUKTCONS_PERS_OFFSET = 107;
+private static final short PUKC_PERS_OFFSET = 158;
+private static final short PRKC_PERS_OFFSET = 209;
+
+private static final short PURKC_PERS_OFFSET = 5;
+private static final short PUKS_PERS_OFFSET = 56;
+private static final short CCERT_PERS_OFFSET = 107;
+private static final short CCERT_EXP_PERS_OFFSET = 127;
+private static final short PIN_PERS_OFFSET = 131;
 
 // some lengths in bytes
-private static final short EC_KEY_LENGTH = 25;
+private static final short EC_PUB_KEY_LENGTH = 51;
+private static final short EC_PRIV_KEY_LENGTH = 24;
 private static final short EC_CERT_LENGTH = 20;
 private static final short AES_KEY_LENGTH = 16;
 private static final short SIGN_LENGTH = 16;
@@ -120,8 +123,6 @@ public CardApplet() {
     nonceC = JCSystem.makeTransientByteArray((short) NONCE_LENGTH, JCSystem.CLEAR_ON_RESET);
     nonceT = JCSystem.makeTransientByteArray((short) NONCE_LENGTH, JCSystem.CLEAR_ON_RESET);
 
-    status[0] = 0x00; // unitialised
-
     skey = (AESKey) KeyBuilder.buildKey(KeyBuilder.TYPE_AES_TRANSIENT_DESELECT, KeyBuilder.LENGTH_AES_128, true);
     pukTMan  = (ECPublicKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_F2M_PUBLIC, KeyBuilder.LENGTH_EC_F2M_193, true); // public key TMan
     pukTChar = (ECPublicKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_F2M_PUBLIC, KeyBuilder.LENGTH_EC_F2M_193, true); // public key TChar
@@ -132,7 +133,7 @@ public CardApplet() {
     puks     = (ECPublicKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_F2M_PUBLIC, KeyBuilder.LENGTH_EC_F2M_193, true);       // Server certificate verification key
     keyExchangeKP = new KeyPair(KeyPair.ALG_EC_FP, (short) 128); // Use 128 for easy match with AES 128
 
-    CCert = new byte[SIGN_LENGTH];      // Server certificate verification key
+    CCert = new byte[EC_CERT_LENGTH];      // Server certificate verification key
     CCertExp = new byte[DATE_LENGTH];   // Date, yymd
     lastKnownTime = new byte[TIME_LENGTH]; // Date and time, yymdhms
 
@@ -144,6 +145,8 @@ public CardApplet() {
     cID = new byte[4];
     cID = new byte[] {(byte) 0xde, (byte) 0xad, (byte) 0xbe, (byte) 0xef}; // TODO: remove this test-data and use only personalise
     tInfo = JCSystem.makeTransientByteArray((short) 6, JCSystem.CLEAR_ON_RESET);
+    
+    select(); // Reset status and tInfo
     
     petrolCredits = (short) 1;
 
@@ -221,7 +224,7 @@ public void process(APDU apdu) throws ISOException, APDUException {
         } else {
             charge(apdu, buffer);
         }
-        break;
+        //break;
         /* charge
 		 * 
 		 * This instruction can be executed at an authenticated charging terminal
@@ -256,7 +259,7 @@ public void process(APDU apdu) throws ISOException, APDUException {
         * Lc: CONSUME_INC_LENGTH
         * Data: encryption of NonceT
         */
-
+/* TODO: sorry, I added this for some testing... (Also look at the break at the end. Cheers, David
         if(!checkAndCopyTypeAndVersion(buffer)) ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
        // if(tInfo[0] != TERM_TYPE_TCONS) ISOException.throwIt()
 
@@ -353,39 +356,48 @@ public void process(APDU apdu) throws ISOException, APDUException {
         /*
          * PERSONALISE instruction:
          *
-         * Only allowed if terminal is authenticated as TMan, and manageable is still True.
+         * Only allowed if manageable is still True.
          * 
-         * Note: every EC key is PERS_INC_LEN bits and every AES key is 128 bits,
+         * Note: every EC public key is 51 bytes; private key 24 bytes; and every AES key is 16 bytes.
          *
-         * TODO: encrypt data for confidentiality? And send MAC? --> Assume TMan is in a secure environment so encryption not necessary?
+         * TODO: Send MAC? --> Assume TMan is in a secure environment so encryption not necessary?
          *
          * INS: 0x50
-         * P1: Disable Personalisation after update
+         * P1: 0b00000bba : a) Disable Personalisation after update; b) 00: first personalisation instruction; 01: second personalisation instruction; 10: only set manageable;
          * P2: Terminal Software Version 
          * Lc: PERS_INC_LEN (bytes)
-         * Data:
-         *      25 bytes pukTMan
-         *      25 bytes pukTChar
-         *      25 bytes pukTCons
-         *      25 bytes pukc
-         *      25 bytes prkc
-         *      25 bytes purkc
-         *      25 bytes puks
+         * Data: (bb = 00)
+         *      51 bytes pukTMan
+         *      51 bytes pukTChar
+         *      51 bytes pukTCons
+         *      51 bytes pukc
+         *      24 bytes prkc
+         * 
+         * Data: (bb = 01)
+         *      51 bytes purkc
+         *      51 bytes puks
          *      20 bytes CCert
          *      4 bytes CCertExp
          *      6 bytes of pin
          */
-        if (manageable && (status[(short) 0] & 0xff) == 0x01) {
+        if (manageable) {
             manageable = (buffer[OFFSET_P1] & 0x01) == 0x01;
+            System.out.println(manageable);
             tInfo[(short) 1] = buffer[OFFSET_P2];
 
             lc_length = apdu.setIncomingAndReceive();
-            if (lc_length < (byte) PERS_INC_LEN) {
-                ISOException.throwIt((short) (SW_WRONG_LENGTH | PERS_INC_LEN));
-            }
-         
+            
             // Configuration is done in the specialised function:
-            personalise(apdu, buffer);      
+            if ((buffer[OFFSET_P1] & 0x06) == 0x00) {
+                if (lc_length < (byte) PERS_INC_LEN0) ISOException.throwIt((short) (SW_WRONG_LENGTH | PERS_INC_LEN0));
+                personalise0(apdu, buffer);      
+            } else if ((buffer[OFFSET_P1] & 0x06) == 0x02) {
+                if (lc_length < (byte) PERS_INC_LEN1) ISOException.throwIt((short) (SW_WRONG_LENGTH | PERS_INC_LEN1));
+                personalise1(apdu, buffer);  
+            }
+        } else  {
+            System.out.println("not manageable");
+            ISOException.throwIt(SW_WARNING_STATE_UNCHANGED);
         }
 
         break;
@@ -705,28 +717,39 @@ public void process(APDU apdu) throws ISOException, APDUException {
      * Assumes that it was checked whether personalisation was allowed.
      * Assumes that the apdu buffer was the correct length.
      */
-    private void personalise(APDU apdu, byte[] buffer) {
+    private void personalise0(APDU apdu, byte[] buffer) {
         buffer = apdu.getBuffer();
         
         JCSystem.beginTransaction();
-        pukTMan.setW(buffer, PUKTMAN_PERS_OFFSET, EC_KEY_LENGTH);
-        pukTChar.setW(buffer, PUKTCHAR_PERS_OFFSET, EC_KEY_LENGTH);
-        pukTCons.setW(buffer, PUKTCONS_PERS_OFFSET, EC_KEY_LENGTH);
-        pukc.setW(buffer, PUKC_PERS_OFFSET, EC_KEY_LENGTH);
-        prkc.setS(buffer, PRKC_PERS_OFFSET, EC_KEY_LENGTH);
-        purkc.setW(buffer, PURKC_PERS_OFFSET, EC_KEY_LENGTH);
-        puks.setW(buffer, PUKS_PERS_OFFSET, EC_KEY_LENGTH);
-
-        Signature s = Signature.getInstance(Signature.ALG_ECDSA_SHA, false);
-        s.init(puks, Signature.MODE_VERIFY);
+        pukTMan.setW(buffer, PUKTMAN_PERS_OFFSET, EC_PUB_KEY_LENGTH);
+        pukTChar.setW(buffer, PUKTCHAR_PERS_OFFSET, EC_PUB_KEY_LENGTH);
+        pukTCons.setW(buffer, PUKTCONS_PERS_OFFSET, EC_PUB_KEY_LENGTH);
+        pukc.setW(buffer, PUKC_PERS_OFFSET, EC_PUB_KEY_LENGTH);
+        prkc.setS(buffer, PRKC_PERS_OFFSET, EC_PRIV_KEY_LENGTH);
         
-        if (true /* TODO: verify card ID and type card and exp date in CCert */) {
-            Util.arrayCopy(buffer, CCERT_PERS_OFFSET, CCert, (short) 0, EC_CERT_LENGTH);
+        JCSystem.commitTransaction();
+        
+        // Readback to ensure correct receiving, no bitrot
+        apdu.setOutgoingAndSend((short) 5, PERS_INC_LEN0);
+    }
+    
+    private void personalise1(APDU apdu, byte[] buffer) {
+        buffer = apdu.getBuffer();
+        
+        JCSystem.beginTransaction();
+        purkc.setW(buffer, PURKC_PERS_OFFSET, EC_PUB_KEY_LENGTH);
+        puks.setW(buffer, PUKS_PERS_OFFSET, EC_PUB_KEY_LENGTH);
+        
+        //if (true /* TODO: verify card ID and type card and exp date in CCert */) {
+         /*   Util.arrayCopy(buffer, CCERT_PERS_OFFSET, CCert, (short) 0, EC_CERT_LENGTH);
             Util.arrayCopy(buffer, CCERT_EXP_PERS_OFFSET, CCertExp, (short) 0, DATE_LENGTH);
         }
 
-        pin.update(buffer, PIN_PERS_OFFSET, PIN_SIZE);
+        pin.update(buffer, PIN_PERS_OFFSET, PIN_SIZE);*/
         JCSystem.commitTransaction();
+     
+        // Readback to ensure correct receiving, no bitrot
+        apdu.setOutgoingAndSend((short) 5, PERS_INC_LEN1);
     }
 	
 	private void charge(APDU apdu, byte[] buffer) {

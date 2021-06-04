@@ -19,6 +19,7 @@ import java.awt.event.ActionListener;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.util.List;
+import java.util.Arrays;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 
@@ -83,6 +84,7 @@ public class TMan extends JPanel implements ActionListener {
     private static final byte PRFE_CLA = (byte) 0xb0;
     private static final byte READ_INS = (byte) 0x00;
     private static final byte AUTH_INS = (byte) 0x10;
+    private static final byte PERS_INS = (byte) 0x50;
 
     // length constants
     private static final short ID_LENGTH = 4;
@@ -96,20 +98,17 @@ public class TMan extends JPanel implements ActionListener {
 
 
     // keys
-    private ECPrivateKey prkTMan;     // private key TMan
-    private ECPublicKey pukTMan;     // public key TChar
-    private ECPublicKey pukTChar;    // public key TChar
-    private ECPublicKey pukTCons;    // public key TCons
-    private ECPrivateKey prkc;       // private key Card
-    private ECPublicKey pukc;        // public key Card
-    private ECPrivateKey prrkc;      // private rekey Card
-    private ECPrivateKey prrkt;      // private rekey Terminal
-    private ECPublicKey puks;        // Server certificate verification key
-    private byte[] CCert;            // Server certificate verification key
-
     private KeyPair keyExchangeKP;
-
+    private KeyPair TMan;
+    private KeyPair TChar;
+    private KeyPair TCons;
+    private KeyPair Server; // Note: for this POC terminals also act as server.
+    private KeyPair Card;
+    private KeyPair ReCard;
     private AESKey skey;
+
+    // private ECPrivateKey prrkt;      // private rekey Terminal
+    private byte[] CCert;            // Server certificate verification key
 
     private KeyAgreement ECExch;
     private Cipher AESCipher;
@@ -123,17 +122,13 @@ public class TMan extends JPanel implements ActionListener {
         skey = (AESKey) KeyBuilder.buildKey(KeyBuilder.TYPE_AES_TRANSIENT_DESELECT, KeyBuilder.LENGTH_AES_128, true);
 
         keyExchangeKP = new KeyPair(KeyPair.ALG_EC_FP, (short) 128); // Use 128 for easy match with AES 128
-/*        prkTMan  = (ECPrivateKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_F2M_PRIVATE, KeyBuilder.LENGTH_EC_F2M_193, true); // private key TMan
-        pukTMan  = (ECPublicKey)  KeyBuilder.buildKey(KeyBuilder.TYPE_EC_F2M_PUBLIC,  KeyBuilder.LENGTH_EC_F2M_193, true); // public key TMan
-        pukTChar = (ECPublicKey)  KeyBuilder.buildKey(KeyBuilder.TYPE_EC_F2M_PUBLIC,  KeyBuilder.LENGTH_EC_F2M_193, true); // public key TChar
-        pukTCons = (ECPublicKey)  KeyBuilder.buildKey(KeyBuilder.TYPE_EC_F2M_PUBLIC,  KeyBuilder.LENGTH_EC_F2M_193, true); // public key TCons
-        prkc     = (ECPrivateKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_F2M_PRIVATE, KeyBuilder.LENGTH_EC_F2M_193, true); // private key Card
-        pukc     = (ECPublicKey)  KeyBuilder.buildKey(KeyBuilder.TYPE_EC_F2M_PUBLIC,  KeyBuilder.LENGTH_EC_F2M_193, true); // public key Card
-        prrkt    = (ECPrivateKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_F2M_PRIVATE, KeyBuilder.LENGTH_EC_F2M_193, true); // private rekey Terminal
-        prrkc    = (ECPrivateKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_F2M_PRIVATE, KeyBuilder.LENGTH_EC_F2M_193, true); // private rekey Card
-        puks     = (ECPublicKey)  KeyBuilder.buildKey(KeyBuilder.TYPE_EC_F2M_PUBLIC,  KeyBuilder.LENGTH_EC_F2M_193, true); // Server certificate verification key
-        CCert    = null;      // Server certificate verification key
-*/
+        TMan = new KeyPair(KeyPair.ALG_EC_F2M, (short) 193);
+        TChar = new KeyPair(KeyPair.ALG_EC_F2M, (short) 193);
+        TCons = new KeyPair(KeyPair.ALG_EC_F2M, (short) 193);
+        Server = new KeyPair(KeyPair.ALG_EC_F2M, (short) 193);
+        Card = new KeyPair(KeyPair.ALG_EC_F2M, (short) 193);
+        ReCard = new KeyPair(KeyPair.ALG_EC_F2M, (short) 193);
+
         AESCipher = Cipher.getInstance(Cipher.ALG_AES_BLOCK_128_CBC_NOPAD, false);
         ECExch = KeyAgreement.getInstance(KeyAgreement.ALG_EC_SVDP_DH, false);
         signature = Signature.getInstance(Signature.ALG_ECDSA_SHA, false);
@@ -163,9 +158,9 @@ public class TMan extends JPanel implements ActionListener {
         display.setForeground(Color.green);
         add(display, BorderLayout.NORTH);
         keypad = new JPanel(new GridLayout(5, 5));
+        key("Personalise");
         key("Read");
         key("Authenticate");
-        key(null);
         key(null);
         key("C");
         key("7");
@@ -294,6 +289,9 @@ public class TMan extends JPanel implements ActionListener {
                     case 'A': // authenticate
                         setText(authenticate());
                         break;
+                    case 'P':
+                        setText(personalise());
+                        break;
                     default:
                         setText(sendKey((byte) c));
                         break;
@@ -409,6 +407,98 @@ public class TMan extends JPanel implements ActionListener {
                 */
         return "blahblahplaceholder";
 
+    }
+
+    public String personalise () {
+        byte[] buffer0 = new byte[228];
+        byte[] buffer1 = new byte[132];
+
+        /**
+         * TODO: put this in report:
+         * we do not do appropriate key management in this example. 
+         * For personalisation the keys are simply generated, and the card is only persistently usable for a single run of the simulator.
+         * In reality, the keypairs are the same for all devices of the same category.
+         */
+        // first generate all the keys:
+        TMan.genKeyPair(); 
+        TChar.genKeyPair(); 
+        TCons.genKeyPair(); 
+        Server.genKeyPair(); 
+        Card.genKeyPair(); 
+        ReCard.genKeyPair(); 
+
+        // Then add them to buffers:
+        ((ECPublicKey) TMan.getPublic()).getW(buffer0, (short) 0);
+        ((ECPublicKey) TChar.getPublic()).getW(buffer0, (short) 51);
+        ((ECPublicKey) TCons.getPublic()).getW(buffer0, (short) 102);
+        ((ECPublicKey) Card.getPublic()).getW(buffer0, (short) 153);
+        ((ECPrivateKey) Card.getPrivate()).getS(buffer0, (short) 204);
+
+        ((ECPublicKey) ReCard.getPublic()).getW(buffer1, (short) 0);
+        ((ECPublicKey) Server.getPublic()).getW(buffer1, (short) 51);
+        //CCert
+        //CCertExp
+        //Pin
+        
+        ResponseAPDU response;
+        CommandAPDU readCommand = new CommandAPDU(PRFE_CLA, PERS_INS, (byte) 1, T_SOFT_VERSION, buffer0, 0, 228, 228);
+        try {
+            //card sends back apdu with the data after transmitting the commandAPDU to the card
+            response = applet.transmit(readCommand);
+        } catch (CardException e) {
+            // TODO: do something with the exception
+            System.out.println(e);
+            return "ERROR: cardException";
+        }
+        // Check that the response is the same as what was sent:
+        byte[] data = response.getBytes(); 
+        if (data[0] == 0x62 && data[1] == 0) {
+            return "Warning: Card not manageable!";
+        }
+        data = response.getData();
+        byte[] dataTrunc = Arrays.copyOfRange(data, 0, 228);
+        if (!Arrays.equals(buffer0, dataTrunc)) {
+            for (int i = 0; i < 132; i++) {
+                if (buffer0[i] != dataTrunc[i]) {
+                    System.out.printf("%d %x %x \n", i, buffer0[i], dataTrunc[i]);
+                }
+            }
+            return "ERROR: Card readback 0 incorrect!";
+        }
+
+        readCommand = new CommandAPDU(PRFE_CLA, PERS_INS, (byte) 0b00000011, T_SOFT_VERSION, buffer1, 0, 132, 132);
+        try {
+            //card sends back apdu with the data after transmitting the commandAPDU to the card
+            response = applet.transmit(readCommand);
+        } catch (CardException e) {
+            // TODO: do something with the exception
+            System.out.println(e);
+            return "ERROR: cardException";
+        }
+        // Check that the response is the same as what was sent:
+        data = response.getData(); 
+        byte[] dataTrunc1 = Arrays.copyOfRange(data, 0, 132);
+        if (!Arrays.equals(buffer1, dataTrunc1)) {
+            for (int i = 0; i < 132; i++) {
+                if (buffer1[i] != dataTrunc1[i]) {
+                    System.out.printf("%d %x %x \n", i, buffer1[i], dataTrunc1[i]);
+                }
+            }
+            return "ERROR: Card readback 1 incorrect!";
+        }
+
+        System.out.println("Disabling personalisation...");
+        // Disable personalise
+        readCommand = new CommandAPDU(PRFE_CLA, PERS_INS, (byte) 0b00000100, T_SOFT_VERSION);
+        try {
+            //card sends back apdu with the data after transmitting the commandAPDU to the card
+            response = applet.transmit(readCommand);
+        } catch (CardException e) {
+            // TODO: do something with the exception
+            System.out.println(e);
+            return "ERROR: cardException";
+        }
+        return "Personalisation success!";
     }
     
     
