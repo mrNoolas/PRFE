@@ -59,6 +59,7 @@ public class TChar extends JPanel implements ActionListener {
 
 	private byte[] tID;
 	private byte[] Sver;
+	private byte[] nonceT;
 	private byte TERMINAL_SOFTWARE_VERSION;
 	private static final byte TERMINAL_TYPE = (byte) 0x2;
 
@@ -72,7 +73,7 @@ public class TChar extends JPanel implements ActionListener {
 
 	//Length constants
 	private static final short TID_LENGTH     = 4;
-    private static final short NONCET_LENGTH  = 4;
+    private static final short NONCET_LENGTH  = 8;
     private static final short AES_KEY_LENGTH = 16;
 	//Instruction bytes
     private static final byte PRFE_CLA = (byte) 0xB0;
@@ -123,6 +124,7 @@ public class TChar extends JPanel implements ActionListener {
 		TCert     = null;
 		
 		tID = new byte[TID_LENGTH];
+		nonceT = new byte[NONCET_LENGTH];
 		monthlyQuota = 1;
 
 
@@ -152,6 +154,15 @@ public class TChar extends JPanel implements ActionListener {
 		// User enters PIN
 		// Terminal accepts PIN: user is authenticated
 		// Terminal declines PIN: user is not authenticated
+	}
+	
+	public void charge(CardApplet card) {
+		byte[] sigBuffer = new byte[(short) 16];
+		signature.init(skey, Signature.MODE_SIGN);
+		signature.sign(nonceT, (short) 0, (short) 8, sigBuffer, (short) 0);
+		CommandAPDU chargeCommand = new CommandAPDU((int PRFE_CLA, (int) READ_INS, (int)TERMINAL_TYPE, (int)TERMINAL_SOFTWARE_VERSION, sigBuffer);
+		ResponseAPDU response = applet.transmit(readCommand);
+		
 	}
 
 	public byte[] hash(byte[] data) {

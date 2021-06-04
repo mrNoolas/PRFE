@@ -26,10 +26,12 @@ private static final short REVOKE_INC_LENGTH = 24; // Sign length + nonce length
 private static final short CHAR1_INC_LEN = 8;
 private static final short CHAR2_INC_LEN = 22;
 
+
 // Response lenghts
 private static final short READ_RESP_LEN = 8;
 private static final short AUTH1_RESP_LEN = 80;
 private static final short CHAR1_RESP_LEN = 22;
+private static final short CHAR2_RESP_LEN = 32;
 
 // keys
 private AESKey skey;
@@ -101,6 +103,7 @@ private short petrolCredits;
 
 private Object[] transactionLog;
 private byte[] lastKnownTime;
+private short tNum; 
 
 // Keeps track of authentication and card state
 // 0x00 unitialised
@@ -122,6 +125,7 @@ public CardApplet() {
     sigBuffer = JCSystem.makeTransientByteArray((short) 30, JCSystem.CLEAR_ON_RESET);
     nonceC = JCSystem.makeTransientByteArray((short) NONCE_LENGTH, JCSystem.CLEAR_ON_RESET);
     nonceT = JCSystem.makeTransientByteArray((short) NONCE_LENGTH, JCSystem.CLEAR_ON_RESET);
+	
 
     skey = (AESKey) KeyBuilder.buildKey(KeyBuilder.TYPE_AES_TRANSIENT_DESELECT, KeyBuilder.LENGTH_AES_128, true);
     pukTMan  = (ECPublicKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_F2M_PUBLIC, KeyBuilder.LENGTH_EC_F2M_193, true); // public key TMan
@@ -133,9 +137,11 @@ public CardApplet() {
     puks     = (ECPublicKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_F2M_PUBLIC, KeyBuilder.LENGTH_EC_F2M_193, true);       // Server certificate verification key
     keyExchangeKP = new KeyPair(KeyPair.ALG_EC_FP, (short) 128); // Use 128 for easy match with AES 128
 
+    tCert = JCSystem.makeTransientByteArray(SIGN_LENGTH, JCSystem.CLEAR_ON_RESET);
     CCert = new byte[EC_CERT_LENGTH];      // Server certificate verification key
     CCertExp = new byte[DATE_LENGTH];   // Date, yymd
     lastKnownTime = new byte[TIME_LENGTH]; // Date and time, yymdhms
+	
 
     AESCipher = Cipher.getInstance(Cipher.ALG_AES_BLOCK_128_CBC_NOPAD, false);
     ECExch = KeyAgreement.getInstance(KeyAgreement.ALG_EC_SVDP_DH, false);
@@ -216,6 +222,7 @@ public void process(APDU apdu) throws ISOException, APDUException {
         }
         break;
     case 0x20:
+		
 		if (!checkAndCopyTypeAndVersion(buffer)) { 
             // reset status:
             select();
@@ -224,29 +231,6 @@ public void process(APDU apdu) throws ISOException, APDUException {
         } else {
             charge(apdu, buffer);
         }
-        //break;
-        /* charge
-		 * 
-		 * This instruction can be executed at an authenticated charging terminal
-		 * 
-		 * INS: 0x20
-		 * P1: 
-		 * P2: Terminal Software Version
-		 * Lc: SIGN_LENGTH
-		 * Data: 
-		 
-		if ((status[(short) 0] & 0xff) == 0x02) {
-		 
-			lc_length = apdu.setIncomingAndReceive();
-			if (lc_length != SIGN_LENGTH) {
-				ISOException.throwIt((short) (SW_WRONG_LENGTH | SIGN_LENGTH));
-			}
-		
-			
-			
-		}
-		
-		*/
         break;
     case 0x30:
         /** CONSUME instruction
@@ -674,6 +658,9 @@ public void process(APDU apdu) throws ISOException, APDUException {
 
         // Compare expiration date and the last known valid date: sanity check on dates   
         checkExpDate(buffer, (short) 36);
+		
+		// Save TCert for charging operation 
+		Util.arrayCopy(buffer, (short) 20, TCert, (short) 0, SIGN_LENGTH);
 
         // copy TCert details into sigBuffer and verify signature. If it verifies, terminal is authenticated, so positive response can be returned :)
         Util.arrayCopyNonAtomic(tInfo, (short) 2, sigBuffer, (short) 0, (short) 4); // terminal ID
@@ -768,6 +755,17 @@ public void process(APDU apdu) throws ISOException, APDUException {
 	}
 	
 	private void chargePhase1(APDU apdu, byte[] buffer) {
+		/* Charge part 1
+		 * 
+		 * This instruction can be executed at an authenticated charging terminal
+		 * 
+		 * INS: 0x20
+		 * P1: Terminal Type 
+		 * P2: Terminal Software Version
+		 * Lc: CHAR1_INC_LEN
+		 * Data: Signature over sequence nr
+		 */
+		 
 		short lc_length = apdu.setIncomingAndReceive();
         if (lc_length < (byte) CHAR1_INC_LEN) {
             ISOException.throwIt((short) (SW_WRONG_LENGTH | CHAR1_INC_LEN));
@@ -775,7 +773,7 @@ public void process(APDU apdu) throws ISOException, APDUException {
 		
 		buffer = apdu.getBuffer();
 		AESCipher.init(skey, Cipher.MODE_DECRYPT);
-		// decrypt sequence nr
+		AESCipher.doFinal(buffer, (short) 0, SIGN_LENGTH, nonceT, (short) 0);
 		incNonce(nonceT);
 		
 		
@@ -799,6 +797,19 @@ public void process(APDU apdu) throws ISOException, APDUException {
 	}
 	
 	private void chargePhase2(APDU apdu, byte[] buffer) {
+		/* Charge part 2
+		 * 
+		 * This instruction can be executed at an authenticated charging terminal
+		 * 
+		 * INS: 0x20
+		 * P1: Terminal Type 
+		 * P2: Terminal Software Version
+		 * Lc: CHAR2_INC_LEN
+		 * Data: 
+		 * 		4 bytes of cID
+		 * 		2 bytes of new quota
+		 *		16 bytes of signature of the data
+		 */
 		short lc_length = apdu.setIncomingAndReceive();
         if (lc_length < (byte) CHAR2_INC_LEN) {
             ISOException.throwIt((short) (SW_WRONG_LENGTH | CHAR2_INC_LEN));
@@ -810,9 +821,39 @@ public void process(APDU apdu) throws ISOException, APDUException {
 		incNonce(nonceT);
 		Util.arrayCopy(nonceT, (short) 0, sigBuffer, (short) 6, (short) NONCE_LENGTH);
 		
+		
+		
 		signature.init(skey, Signature.MODE_VERIFY);
+		if(!signature.verify(sigBuff, (short) 0, (short) 14, buffer, (short) 14, SIGN_LENGTH)) {
+			ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
+			
+			
+			
+		}
+		petrolCredits = (short) (petrolCredits + buffer[(short) 5);
+		petrolCredits = (short) (petrolCredits + (buffer[(short) 6) << 8);
 		
 		
+		short expectedLength = apdu.setOutgoing();
+        if (expectedLength < (short) CHAR2_RESP_LEN) ISOException.throwIt((short) (SW_WRONG_LENGTH | CHAR2_RESP_LEN));
+        apdu.setOutgoingLength((byte) CHAR2_RESP_LEN);
+		
+		Util.arrayCopy(cID, (short) 0, sigBuffer, (short) 0, (short) 4);
+		Util.arrayCopy(TCert, (short) 0, sigBuffer, (short) 4, (short) 16);
+		sigBuffer[(short) 20] = (byte) (petrolCredits & 0xff);
+		sigBuffer[(short) 21] = (byte) ((petrolCredits >> 8) & 0xff);
+		(short) tNum = (short) (tNum + 1);
+		sigBuffer[(short) 22] = (byte) (tNum & 0xff);
+		sigBuffer[(short) 23] = (byte) ((tNum >> 8) & 0xff);
+		
+		signature.init(skey, Signature.MODE_SIGN);
+		signature.sign(sigBuffer, (short) 0, (short) 24, buffer, (short) 0);
+		
+		incNonce(nonceT);
+		signature.sign(nonceT, (short) 0, NONCE_LENGTH, buffer, SIGN_LENGTH);
+		
+		apdu.setOutgoingAndSend((short) 0, (short) CHAR2_RESP_LEN);
+		status[(short) 0] = (byte) (status[(short) 0] - 0x10);
 	}
 
 	/**
