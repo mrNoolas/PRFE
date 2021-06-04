@@ -25,10 +25,12 @@ private static final short REVOKE_INC_LENGTH = 24; // Sign length + nonce length
 private static final short CHAR1_INC_LEN = 8;
 private static final short CHAR2_INC_LEN = 22;
 
+
 // Response lenghts
 private static final short READ_RESP_LEN = 8;
 private static final short AUTH1_RESP_LEN = 80;
 private static final short CHAR1_RESP_LEN = 22;
+private static final short CHAR2_RESP_LEN = 32;
 
 // keys
 private AESKey skey;
@@ -98,6 +100,7 @@ private short petrolCredits;
 
 private Object[] transactionLog;
 private byte[] lastKnownTime;
+private short tNum; 
 
 // Keeps track of authentication and card state
 // 0x00 unitialised
@@ -119,6 +122,7 @@ public CardApplet() {
     sigBuffer = JCSystem.makeTransientByteArray((short) 30, JCSystem.CLEAR_ON_RESET);
     nonceC = JCSystem.makeTransientByteArray((short) NONCE_LENGTH, JCSystem.CLEAR_ON_RESET);
     nonceT = JCSystem.makeTransientByteArray((short) NONCE_LENGTH, JCSystem.CLEAR_ON_RESET);
+	
 
     status[0] = 0x00; // unitialised
 
@@ -135,6 +139,7 @@ public CardApplet() {
     CCert = new byte[SIGN_LENGTH];      // Server certificate verification key
     CCertExp = new byte[DATE_LENGTH];   // Date, yymd
     lastKnownTime = new byte[TIME_LENGTH]; // Date and time, yymdhms
+	
 
     AESCipher = Cipher.getInstance(Cipher.ALG_AES_BLOCK_128_CBC_NOPAD, false);
     ECExch = KeyAgreement.getInstance(KeyAgreement.ALG_EC_SVDP_DH, false);
@@ -144,7 +149,8 @@ public CardApplet() {
     cID = new byte[4];
     cID = new byte[] {(byte) 0xde, (byte) 0xad, (byte) 0xbe, (byte) 0xef}; // TODO: remove this test-data and use only personalise
     tInfo = JCSystem.makeTransientByteArray((short) 6, JCSystem.CLEAR_ON_RESET);
-    
+    tCert = JCSystem.makeTransientByteArray(SIGN_LENGTH, JCSystem.CLEAR_ON_RESET);
+	
     petrolCredits = (short) 1;
 
     /*xy = JCSystem.makeTransientShortArray((short) 2, JCSystem.CLEAR_ON_RESET);
@@ -662,6 +668,9 @@ public void process(APDU apdu) throws ISOException, APDUException {
 
         // Compare expiration date and the last known valid date: sanity check on dates   
         checkExpDate(buffer, (short) 36);
+		
+		// Save TCert for charging operation 
+		Util.arrayCopy(buffer, (short) 20, TCert, (short) 0, SIGN_LENGTH);
 
         // copy TCert details into sigBuffer and verify signature. If it verifies, terminal is authenticated, so positive response can be returned :)
         Util.arrayCopyNonAtomic(tInfo, (short) 2, sigBuffer, (short) 0, (short) 4); // terminal ID
@@ -787,9 +796,39 @@ public void process(APDU apdu) throws ISOException, APDUException {
 		incNonce(nonceT);
 		Util.arrayCopy(nonceT, (short) 0, sigBuffer, (short) 6, (short) NONCE_LENGTH);
 		
+		
+		
 		signature.init(skey, Signature.MODE_VERIFY);
+		if(!signature.verify(sigBuff, (short) 0, (short) 14, buffer, (short) 14, SIGN_LENGTH)) {
+			ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
+			
+			
+			
+		}
+		petrolCredits = (short) (petrolCredits + buffer[(short) 5);
+		petrolCredits = (short) (petrolCredits + (buffer[(short) 6) << 8);
 		
 		
+		short expectedLength = apdu.setOutgoing();
+        if (expectedLength < (short) CHAR2_RESP_LEN) ISOException.throwIt((short) (SW_WRONG_LENGTH | CHAR2_RESP_LEN));
+        apdu.setOutgoingLength((byte) CHAR2_RESP_LEN);
+		
+		Util.arrayCopy(cID, (short) 0, sigBuffer, (short) 0, (short) 4);
+		Util.arrayCopy(TCert, (short) 0, sigBuffer, (short) 4, (short) 16);
+		sigBuffer[(short) 20] = (byte) (petrolCredits & 0xff);
+		sigBuffer[(short) 21] = (byte) ((petrolCredits >> 8) & 0xff);
+		(short) tNum = (short) (tNum + 1);
+		sigBuffer[(short) 22] = (byte) (tNum & 0xff);
+		sigBuffer[(short) 23] = (byte) ((tNum >> 8) & 0xff);
+		
+		signature.init(skey, Signature.MODE_SIGN);
+		signature.sign(sigBuffer, (short) 0, (short) 24, buffer, (short) 0);
+		
+		incNonce(nonceT);
+		signature.sign(nonceT, (short) 0, NONCE_LENGTH, buffer, SIGN_LENGTH);
+		
+		apdu.setOutgoingAndSend((short) 0, (short) CHAR2_RESP_LEN);
+		status[(short) 0] = (byte) (status[(short) 0] - 0x10);
 	}
 
 	/**
