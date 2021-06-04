@@ -219,6 +219,7 @@ public void process(APDU apdu) throws ISOException, APDUException {
         }
         break;
     case 0x20:
+		
 		if (!checkAndCopyTypeAndVersion(buffer)) { 
             // reset status:
             select();
@@ -228,26 +229,9 @@ public void process(APDU apdu) throws ISOException, APDUException {
             charge(apdu, buffer);
         }
         break;
-        /* charge
-		 * 
-		 * This instruction can be executed at an authenticated charging terminal
-		 * 
-		 * INS: 0x20
-		 * P1: 
-		 * P2: Terminal Software Version
-		 * Lc: SIGN_LENGTH
-		 * Data: 
+        
 		 
-		if ((status[(short) 0] & 0xff) == 0x02) {
-		 
-			lc_length = apdu.setIncomingAndReceive();
-			if (lc_length != SIGN_LENGTH) {
-				ISOException.throwIt((short) (SW_WRONG_LENGTH | SIGN_LENGTH));
-			}
 		
-			
-			
-		}
 		
 		*/
         break;
@@ -754,6 +738,17 @@ public void process(APDU apdu) throws ISOException, APDUException {
 	}
 	
 	private void chargePhase1(APDU apdu, byte[] buffer) {
+		/* Charge part 1
+		 * 
+		 * This instruction can be executed at an authenticated charging terminal
+		 * 
+		 * INS: 0x20
+		 * P1: Terminal Type 
+		 * P2: Terminal Software Version
+		 * Lc: CHAR1_INC_LEN
+		 * Data: Signature over sequence nr
+		 */
+		 
 		short lc_length = apdu.setIncomingAndReceive();
         if (lc_length < (byte) CHAR1_INC_LEN) {
             ISOException.throwIt((short) (SW_WRONG_LENGTH | CHAR1_INC_LEN));
@@ -761,7 +756,7 @@ public void process(APDU apdu) throws ISOException, APDUException {
 		
 		buffer = apdu.getBuffer();
 		AESCipher.init(skey, Cipher.MODE_DECRYPT);
-		// decrypt sequence nr
+		AESCipher.doFinal(buffer, (short) 0, SIGN_LENGTH, nonceT, (short) 0);
 		incNonce(nonceT);
 		
 		
@@ -785,6 +780,19 @@ public void process(APDU apdu) throws ISOException, APDUException {
 	}
 	
 	private void chargePhase2(APDU apdu, byte[] buffer) {
+		/* Charge part 2
+		 * 
+		 * This instruction can be executed at an authenticated charging terminal
+		 * 
+		 * INS: 0x20
+		 * P1: Terminal Type 
+		 * P2: Terminal Software Version
+		 * Lc: CHAR2_INC_LEN
+		 * Data: 
+		 * 		4 bytes of cID
+		 * 		2 bytes of new quota
+		 *		16 bytes of signature of the data
+		 */
 		short lc_length = apdu.setIncomingAndReceive();
         if (lc_length < (byte) CHAR2_INC_LEN) {
             ISOException.throwIt((short) (SW_WRONG_LENGTH | CHAR2_INC_LEN));
