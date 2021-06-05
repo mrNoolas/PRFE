@@ -75,6 +75,7 @@ public class TChar extends JPanel implements ActionListener {
 	private static final short TID_LENGTH     = 4;
     private static final short NONCET_LENGTH  = 8;
     private static final short AES_KEY_LENGTH = 16;
+	private static final short SIGN_LENGTH = 16;
 	//Instruction bytes
     private static final byte PRFE_CLA = (byte) 0xB0;
     private static final byte READ_INS = (byte) 0x00;
@@ -160,9 +161,50 @@ public class TChar extends JPanel implements ActionListener {
 		byte[] sigBuffer = new byte[(short) 16];
 		signature.init(skey, Signature.MODE_SIGN);
 		signature.sign(nonceT, (short) 0, (short) 8, sigBuffer, (short) 0);
-		CommandAPDU chargeCommand = new CommandAPDU((int PRFE_CLA, (int) READ_INS, (int)TERMINAL_TYPE, (int)TERMINAL_SOFTWARE_VERSION, sigBuffer);
-		ResponseAPDU response = applet.transmit(readCommand);
+		CommandAPDU chargeCommand = new CommandAPDU((int) PRFE_CLA, (int) CHAR_INS, (int)TERMINAL_TYPE, (int)TERMINAL_SOFTWARE_VERSION, sigBuffer);
+		try {
+			ResponseAPDU response = applet.transmit(chargeCommand);
+		} catch (CardException e) {
+			System.out.println(e);
+			return 0;
+		}
 		
+		byte[] data = response.getData();
+		byte[] cardID = new byte[4];
+		System.arraycopy(data, 0, cardID, 0, 4);
+		
+		short petrolQuota = Util.getShort(data, (short) 4);
+		
+		System.arrayCopy(data, 0, sigBuffer, 0, 6);
+		incNonce(nonceT);
+		System.arrayCopy(nonceT, 0, sigBuffer, 6, NONCET_LENGTH);
+		
+		signature.init(skey, Signature.MODE_VERIFY);
+		if (!signature.verify(sigBuffer, 0, 14, data, 6, SIGN_LENGTH) {
+			break;
+		}
+		
+		short extraQuota = getMonthlyQuota(cardID);
+		data[4] = (byte) (extraQuota & 0xff);
+		data[5] = (byte) ((extraQuota >> 8) & 0xff);
+		incNonce(nonceT);
+		System.arrayCopy(nonceT, 0, data, 6, NONCET_LENGTH);
+		
+		signature.init(skey, Signature.MODE_SIGN);
+		signature.sign(data, 0, 14, data, 6);
+		CommandAPDU chargeCommand = new CommandAPDU((int) PRFE_CLA, (int) CHAR_INS, (int) TERMINAL_TYPE, (int)TERMINAL_SOFTWARE_VERSION, data);
+		try {
+			ResponseAPDU response = applet.transmit(chargeCommand);
+		} catch (CardException e) {
+			System.out.println(e);
+			return 0;
+		}
+		
+		
+	}
+	
+	private short getMonthlyQuota(cardID) {
+		return 1;
 	}
 
 	public byte[] hash(byte[] data) {
@@ -208,7 +250,7 @@ public class TChar extends JPanel implements ActionListener {
 		 
 		short petrolCredit = data[(short) 0];
 		petrolCredit = (short) petrolCredit + (short) monthlyQuota;
-		CommandAPDU chargeCommand = new CommandAPDU((int)PRFE_CLA, (int) CHAR_INS, (short) monthlyQuota, (int) 0;
+		CommandAPDU chargeCommand = new CommandAPDU((int)PRFE_CLA, (int) CHAR_INS, (short) monthlyQuota, (int) 0);
 		ResponseAPDU response = applet.transmit(chargeCommand); 
 		
 		
@@ -222,6 +264,19 @@ public class TChar extends JPanel implements ActionListener {
         //
         return 0;
     };
+	
+	private void incNonce (byte[] nonce) {
+        for (short i = (short) 7; i >= (short) 0; i--) {
+            if (nonce[i] == 0xff) {
+                nonce[i] = (byte) 0x00;
+                // Continue looping to process carry
+            } else { 
+                nonce[i] = (byte) (((short) (nonce[i] & 0xff) + 1) & 0xff); // increment byte with 1, unsigned
+                break; // no carry so quit
+            }
+        }
+        // Any remaining carry is just ignored.
+    }
 
     void buildGUI(JFrame parent) {
         setLayout(new BorderLayout());
