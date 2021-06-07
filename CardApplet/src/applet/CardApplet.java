@@ -50,8 +50,11 @@ private ECPrivateKey prkc;       // private key Card
 private ECPublicKey purkc;      // public rekey Card
 private ECPublicKey puks;       // Server certificate verification key
 private KeyPair keyExchangeKP;  // Used for generating new random keys for a key exchange. Resulting key is used as AES session key.
-private byte[] CCert;           // Server certificate
-private byte[] CCertExp;       // Expiration date of the certificate
+
+private byte[] CCert;           // Server certificate signing CID, CType, and CCertExp
+private byte[] CCertExp;       // Expiration date of the certificate yymd 4 bytes
+private byte[] TCert;           // Server certificate signing TID, TType and TCertExp
+private byte[] TCertExp;        // Exp date of the certificate yymd, 4 bytes
 
 // Key offsets in personalisation messages:
 private static final short PUKTMAN_PERS_OFFSET = 5;
@@ -143,7 +146,8 @@ public CardApplet() {
     puks     = (ECPublicKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_F2M_PUBLIC, KeyBuilder.LENGTH_EC_F2M_193, true);       // Server certificate verification key
     keyExchangeKP = new KeyPair(KeyPair.ALG_EC_FP, (short) 128); // Use 128 for easy match with AES 128
 
-    tCert = JCSystem.makeTransientByteArray(SIGN_LENGTH, JCSystem.CLEAR_ON_RESET);
+    TCert = JCSystem.makeTransientByteArray(EC_CERT_LENGTH, JCSystem.CLEAR_ON_RESET);
+    TCertExp = JCSystem.makeTransientByteArray(DATE_LENGTH, JCSystem.CLEAR_ON_RESET);
     CCert = new byte[EC_CERT_LENGTH];      // Server certificate verification key
     CCertExp = new byte[DATE_LENGTH];   // Date, yymd
     lastKnownTime = new byte[TIME_LENGTH]; // Date and time, yymdhms
@@ -778,7 +782,7 @@ public void process(APDU apdu) throws ISOException, APDUException {
 		 * 		4 bytes of cID
 		 * 		2 bytes of new quota
 		 *		16 bytes of signature of the data
-		 */
+		 *
 		short lc_length = apdu.setIncomingAndReceive();
         if (lc_length < (byte) CHAR2_INC_LEN) {
             ISOException.throwIt((short) (SW_WRONG_LENGTH | CHAR2_INC_LEN));
@@ -799,8 +803,8 @@ public void process(APDU apdu) throws ISOException, APDUException {
 
 
 		}
-		petrolCredits = (short) (petrolCredits + buffer[(short) 5);
-		petrolCredits = (short) (petrolCredits + (buffer[(short) 6) << 8);
+		petrolCredits = (short) (petrolCredits + buffer[(short) 5]);
+		petrolCredits = (short) (petrolCredits + (buffer[(short) 6]) << 8);
 
 		
 		short expectedLength = apdu.setOutgoing();
@@ -823,6 +827,7 @@ public void process(APDU apdu) throws ISOException, APDUException {
 
 		apdu.setOutgoingAndSend((short) 0, (short) CHAR2_RESP_LEN);
 		status[(short) 0] = (byte) (status[(short) 0] - 0x10);
+        */
 	}
 
 	private void consume(APDU apdu, byte[] buffer) {
@@ -844,7 +849,7 @@ public void process(APDU apdu) throws ISOException, APDUException {
     }
 
     private void consumePhase1(APDU apdu, byte[] buffer) {
-        lc_length = apdu.setIncomingAndReceive();
+        /*lc_length = apdu.setIncomingAndReceive();
         if (lc_length < (byte) CONS1_INC_LENGTH) {
             ISOException.throwIt((short) (SW_WRONG_LENGTH | CONS1_INC_LENGTH));
         }
@@ -859,7 +864,7 @@ public void process(APDU apdu) throws ISOException, APDUException {
         card-id (4 bytes), petrolcredits (short), mac(hash{card-id, petrolCredits, incNonce(nonceT)}, skey)
         -> signature using ALG_AES_MAC_128?: would generate a 16 byte MAC
         */
-
+/*
         nonceC = incNonce(nonceT);
         //hashedData = hash(card-id, petrolCredits, nonceC) -> hashing algorithm? SHA-1?
 
@@ -893,11 +898,11 @@ public void process(APDU apdu) throws ISOException, APDUException {
 
         apdu.sendBytes((short) 0, (short) CONS1_RESP_LEN);
         status[(short) 0] = (byte) (status[(short) 0] + 0x10);
-
+*/
     }
 
     private void consumePhase2(APDU apdu, byte[] buffer){
-        lc_length = apdu.setIncomingAndReceive();
+  /*      lc_length = apdu.setIncomingAndReceive();
         if (lc_length < (byte) CONS2_INC_LENGTH) {
             ISOException.throwIt((short) (SW_WRONG_LENGTH | CONS2_INC_LENGTH));
         }
@@ -956,11 +961,11 @@ public void process(APDU apdu) throws ISOException, APDUException {
 
         apdu.sendBytes((short) 0, (short) CONS1_RESP_LEN);
         status[(short) 0] = (byte) (status[(short) 0] + 0x20);
-
+*/
     }
 
     private void consumePhase3(APDU apdu, byte[] buffer){
-
+/*
         lc_length = apdu.setIncomingAndReceive();
         if (lc_length < (byte) CONS3_INC_LENGTH) {
             ISOException.throwIt((short) (SW_WRONG_LENGTH | CONS3_INC_LENGTH));
@@ -993,13 +998,14 @@ public void process(APDU apdu) throws ISOException, APDUException {
             mac(hash({card-id, TCert, petrolCredits, transaction_nr}, skey)
             mac({nonceC}, skey)
              */
+        /*
         }
 
         if(!verified){
             select();
             ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
         }
-
+*/
     }
 
 	/**

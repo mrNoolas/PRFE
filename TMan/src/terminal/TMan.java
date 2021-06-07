@@ -109,6 +109,7 @@ public class TMan extends JPanel implements ActionListener {
 
     // private ECPrivateKey prrkt;      // private rekey Terminal
     private byte[] CCert;            // Server certificate verification key
+    private byte[] CCertExp = {(byte) 0x07, (byte) 0xe6, (byte) 0x01, (byte) 0x01}; // yymd: 2022-01-01
 
     private KeyAgreement ECExch;
     private Cipher AESCipher;
@@ -436,8 +437,13 @@ public class TMan extends JPanel implements ActionListener {
 
         ((ECPublicKey) ReCard.getPublic()).getW(buffer1, (short) 0);
         ((ECPublicKey) Server.getPublic()).getW(buffer1, (short) 51);
-        //CCert
-        //CCertExp
+
+        // generate CCert
+        signature.init(Server.getPrivate(), MODE_SIGN);
+        signature.update(T_ID, (short) 0, (short) 4);
+        signature.update(new byte[] {T_TYPE}, (short) 0, (short) 1);
+        System.out.println(signature.sign(CCertExp, (short) 0, (short) 4, buffer1, (short) 102));
+
         //Pin
         
         ResponseAPDU response;
