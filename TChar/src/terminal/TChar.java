@@ -4,6 +4,7 @@ import javacard.framework.AID;
 import javacard.framework.ISO7816;
 import javacard.framework.*;
 import javacard.security.*;
+import javacardx.crypto.*;
 
 import java.awt.BorderLayout;
 import java.awt.Color;
@@ -68,22 +69,32 @@ public class TChar extends JPanel implements ActionListener {
 	private ECPrivateKey prkTChar; // private key TChar
 	private ECPublicKey purkTChar; // public rekey key TChar
 	private ECPublicKey puks; // certificate verification key
-	private AESKey skey; 
+	private AESKey skey;
 	private byte[] TCert; // Terminal certificate
 
-	//Length constants
-	private static final short TID_LENGTH     = 4;
+		//Length constants
+		private static final short ID_LENGTH = 4;
+		private static final short NONCE_LENGTH = 8;
+		private static final short TID_LENGTH     = 4;
     private static final short NONCET_LENGTH  = 8;
     private static final short AES_KEY_LENGTH = 16;
-	private static final short SIGN_LENGTH = 16;
-	//Instruction bytes
+		private static final short SIGN_LENGTH = 16;
+
+		//Instruction bytes / General constants
     private static final byte PRFE_CLA = (byte) 0xB0;
     private static final byte READ_INS = (byte) 0x00;
     private static final byte AUTH_INS = (byte) 0x10;
     private static final byte CHAR_INS = (byte) 0x20;
     private static final byte REV_INS  = (byte) 0x40;
-	
-	private short monthlyQuota;
+
+
+
+    // Data about this terminal:
+    private static final byte T_TYPE = (byte) 0x02;
+    private static final byte T_SOFT_VERSION = (byte) 0x00;
+    private static final byte[] T_ID = {(byte) 0x01, (byte) 0x01, (byte) 0x01, (byte) 0x01};
+
+		private short monthlyQuota;
 
 
     //private JavaxSmartCardInterface simulatorInterface; // SIM
@@ -123,7 +134,7 @@ public class TChar extends JPanel implements ActionListener {
 		purkTChar = (ECPublicKey)  KeyBuilder.buildKey(KeyBuilder.TYPE_EC_F2M_PUBLIC,  KeyBuilder.LENGTH_EC_F2M_193, true);
 		puks      = (ECPublicKey)  KeyBuilder.buildKey(KeyBuilder.TYPE_EC_F2M_PUBLIC,  KeyBuilder.LENGTH_EC_F2M_193, true);
 		TCert     = null;
-		
+
 		tID = new byte[TID_LENGTH];
 		nonceT = new byte[NONCET_LENGTH];
 		monthlyQuota = 1;
@@ -132,22 +143,44 @@ public class TChar extends JPanel implements ActionListener {
 
     }
 
-	public void readCard(CardApplet card) {
-		// This function reads the information from the presented card given by parameter card
-		// Send APDU to card
-		// Receive APDU from card containing a response
-		// Process response
-		// Show response on terminal
+		public int readCard() {                                                 //default method, read information on card
+				//construct a commandAPDU with the INS byte for read and the terminal info
+				CommandAPDU readCommand = new CommandAPDU(PRFE_CLA, READ_INS, T_TYPE, T_SOFT_VERSION, T_ID, 0, ID_LENGTH, 8);
 
-		CommandAPDU readCommand = new CommandAPDU((int)PRFE_CLA, (int) READ_INS, (int)TERMINAL_TYPE, (int)TERMINAL_SOFTWARE_VERSION);
+				ResponseAPDU response;
+				try {
+						//card sends back apdu with the data after transmitting the commandAPDU to the card
+						response = applet.transmit(readCommand);
+				} catch (CardException e) {
+						// TODO: do something with the exception
+						System.out.println(e);
+						return 0;
+				}
 
-		ResponseAPDU response = applet.transmit(readCommand);
 
-		byte[] responseBytes = response.getBytes();
-		byte[] data = response.getData();
-		byte[] cardID = new byte[(short) 4];
-		Util.arrayCopy(data, (short) 0, cardID, (short) 0, (short) 4);
-	}
+				/*
+				 * process the response apdu
+				 *
+				 * data:
+				 *  1 byte card type
+				 *  1 byte card software version
+				 *  4 bytes card ID
+				 *  2 bytes petrolcredits
+				 */
+				byte[] data = response.getData();
+
+				byte cardType = data[0];
+				byte cardSoftVers = data[1];
+
+				byte[] cardID = new byte[4];
+				System.arraycopy(data, 2, cardID, 0, 4);
+
+				short petrolQuota = Util.getShort(data, (short) 6);
+
+				System.out.printf("Read response from Card: Type: %x; Soft Vers: %x; ID: %x%x%x%x; Petrolquota: %x \n",
+								cardType, cardSoftVers, cardID[0], cardID[1], cardID[2], cardID[3], petrolQuota);
+				return (int) petrolQuota;
+		}
 
 	public void authenticateCardAndBuyer(CardApplet card) {
 		// This function ensures that the card and the buyer are properly authenticated before starting a transaction
@@ -156,8 +189,8 @@ public class TChar extends JPanel implements ActionListener {
 		// Terminal accepts PIN: user is authenticated
 		// Terminal declines PIN: user is not authenticated
 	}
-	
-	public void charge(CardApplet card) {
+
+	/*public void charge(CardApplet card) {
 		byte[] sigBuffer = new byte[(short) 16];
 		signature.init(skey, Signature.MODE_SIGN);
 		signature.sign(nonceT, (short) 0, (short) 8, sigBuffer, (short) 0);
@@ -168,28 +201,28 @@ public class TChar extends JPanel implements ActionListener {
 			System.out.println(e);
 			return 0;
 		}
-		
+
 		byte[] data = response.getData();
 		byte[] cardID = new byte[4];
 		System.arraycopy(data, 0, cardID, 0, 4);
-		
+
 		short petrolQuota = Util.getShort(data, (short) 4);
-		
+
 		System.arrayCopy(data, 0, sigBuffer, 0, 6);
 		incNonce(nonceT);
 		System.arrayCopy(nonceT, 0, sigBuffer, 6, NONCET_LENGTH);
-		
+
 		signature.init(skey, Signature.MODE_VERIFY);
-		if (!signature.verify(sigBuffer, 0, 14, data, 6, SIGN_LENGTH) {
+		if (!signature.verify(sigBuffer, 0, 14, data, 6, SIGN_LENGTH)) {
 			break;
 		}
-		
+
 		short extraQuota = getMonthlyQuota(cardID);
 		data[4] = (byte) (extraQuota & 0xff);
 		data[5] = (byte) ((extraQuota >> 8) & 0xff);
 		incNonce(nonceT);
 		System.arrayCopy(nonceT, 0, data, 6, NONCET_LENGTH);
-		
+
 		signature.init(skey, Signature.MODE_SIGN);
 		signature.sign(data, 0, 14, data, 6);
 		CommandAPDU chargeCommand = new CommandAPDU((int) PRFE_CLA, (int) CHAR_INS, (int) TERMINAL_TYPE, (int)TERMINAL_SOFTWARE_VERSION, data);
@@ -199,11 +232,11 @@ public class TChar extends JPanel implements ActionListener {
 			System.out.println(e);
 			return 0;
 		}
-		
-		
+
+
 	}
-	
-	private short getMonthlyQuota(cardID) {
+
+	private short getMonthlyQuota(byte[] cardID) {
 		return 1;
 	}
 
@@ -240,82 +273,82 @@ public class TChar extends JPanel implements ActionListener {
 		// Updates the quota on the card
 		// Requires authenticateCardAndBuyer()
 		// new_amount = old_amount + quota
-		
-		
+
+
 		CommandAPDU chargeCommand = new CommandAPDU((int)PRFE_CLA, (int) CHAR_INS, (int) TERMINAL_TYPE, (int) TERMINAL_SOFTWARE_VERSION);
 		ResponseAPDU response = applet.transmit(chargeCommand);
 		byte[] responseBytes = response.getBytes();
 		byte[] data = response.getData();
-		
-		 
+
+
 		short petrolCredit = data[(short) 0];
 		petrolCredit = (short) petrolCredit + (short) monthlyQuota;
 		CommandAPDU chargeCommand = new CommandAPDU((int)PRFE_CLA, (int) CHAR_INS, (short) monthlyQuota, (int) 0);
-		ResponseAPDU response = applet.transmit(chargeCommand); 
-		
-		
-		
-		
+		ResponseAPDU response = applet.transmit(chargeCommand);
+
+
+
+
 	}
-	
+
 	public short getPetrolCredit(byte[] data){
         //get petrol credit from the card
         //
         //
         return 0;
     };
-	
+
 	private void incNonce (byte[] nonce) {
         for (short i = (short) 7; i >= (short) 0; i--) {
             if (nonce[i] == 0xff) {
                 nonce[i] = (byte) 0x00;
                 // Continue looping to process carry
-            } else { 
+            } else {
                 nonce[i] = (byte) (((short) (nonce[i] & 0xff) + 1) & 0xff); // increment byte with 1, unsigned
                 break; // no carry so quit
             }
         }
         // Any remaining carry is just ignored.
     }
-
-    void buildGUI(JFrame parent) {
-        setLayout(new BorderLayout());
-        display = new JTextField(DISPLAY_WIDTH);
-        display.setHorizontalAlignment(JTextField.RIGHT);
-        display.setEditable(false);
-        display.setFont(FONT);
-        display.setBackground(Color.darkGray);
-        display.setForeground(Color.green);
-        add(display, BorderLayout.NORTH);
-        keypad = new JPanel(new GridLayout(5, 5));
-        key(null);
-        key(null);
-        key(null);
-        key(null);
-        key("C");
-        key("7");
-        key("8");
-        key("9");
-        key(":");
-        key("ST");
-        key("4");
-        key("5");
-        key("6");
-        key("x");
-        key("RM");
-        key("1");
-        key("2");
-        key("3");
-        key("-");
-        key("M+");
-        key("0");
-        key(null);
-        key(null);
-        key("+");
-        key("=");
-        add(keypad, BorderLayout.CENTER);
-        parent.addWindowListener(new CloseEventListener());
-    }
+*/
+		void buildGUI(JFrame parent) {
+				setLayout(new BorderLayout());
+				display = new JTextField(DISPLAY_WIDTH);
+				display.setHorizontalAlignment(JTextField.RIGHT);
+				display.setEditable(false);
+				display.setFont(FONT);
+				display.setBackground(Color.darkGray);
+				display.setForeground(Color.green);
+				add(display, BorderLayout.NORTH);
+				keypad = new JPanel(new GridLayout(5, 5));
+				key("Personalise");
+				key("Read");
+				key("Authenticate");
+				key(null);
+				key("C");
+				key("7");
+				key("8");
+				key("9");
+				key(":");
+				key("ST");
+				key("4");
+				key("5");
+				key("6");
+				key("x");
+				key("RM");
+				key("1");
+				key("2");
+				key("3");
+				key("-");
+				key("M+");
+				key("0");
+				key(null);
+				key(null);
+				key("+");
+				key("=");
+				add(keypad, BorderLayout.CENTER);
+				parent.addWindowListener(new CloseEventListener());
+		}
 
     void key(String txt) {
         if (txt == null) {
@@ -448,44 +481,60 @@ public class TChar extends JPanel implements ActionListener {
 
     /* Connect the terminal with a simulated smartcard JCardSim
      */
-    class SimulatedCardThread extends Thread {
-        public void run() {
-          // Obtain a CardTerminal
-          CardTerminals cardTerminals = CardTerminalSimulator.terminals("My terminal 1");
-          CardTerminal terminal1 = cardTerminals.getTerminal("My terminal 1");
+		 class SimulatedCardThread extends Thread {
+         public void run() {
+           // Create simulator and install applet
+           CardSimulator simulator = new CardSimulator();
+           AID cardAppletAID = new AID(CALC_APPLET_AID,(byte)0,(byte)7);
+           simulator.installApplet(cardAppletAID, CardApplet.class);
 
-          // Create simulator and install applet
-          CardSimulator simulator = new CardSimulator();
-          AID cardAppletAID = new AID(CALC_APPLET_AID,(byte)0,(byte)7);
-          simulator.installApplet(cardAppletAID, CardApplet.class);
+           // Obtain a CardTerminal
+           CardTerminal terminal = CardTerminalSimulator.terminal(simulator);
 
-          // Insert Card into "My terminal 1"
-          simulator.assignToTerminal(terminal1);
+           // Insert Card into "My terminal 1"
+           simulator.assignToTerminal(terminal);
 
-          try {
-            Card card = terminal1.connect("*");
+           try {
+             Card card = terminal.connect("T=1");
 
-    	    applet = card.getBasicChannel();
-    	    ResponseAPDU resp = applet.transmit(SELECT_APDU);
-    	    if (resp.getSW() != 0x9000) {
-    	      throw new Exception("Select failed");
-    	    }
-    	    setText(sendKey((byte) '='));
-    	    setEnabled(true);
-          } catch (Exception e) {
-              System.err.println("Card status problem!");
-          }
-      }
-    }
+     	    applet = card.getBasicChannel();
+     	    ResponseAPDU resp = applet.transmit(SELECT_APDU);
+     	    if (resp.getSW() != 0x9000) {
+     	      throw new Exception("Select failed");
+     	    }
+     	    //setText(sendKey((byte) '='));
+             System.out.println("Reading card now:");
+             setText(readCard());
+     	    setEnabled(true);
+           } catch (Exception e) {
+               System.err.println("Card status problem!");
+           }
+       }
+     }
 
-    public void actionPerformed(ActionEvent ae) {
+		public void actionPerformed(ActionEvent ae) {
         try {
             Object src = ae.getSource();
             if (src instanceof JButton) {
                 char c = ((JButton) src).getText().charAt(0);
-                setText(sendKey((byte) c));
+
+                switch(c) {
+                    case 'R': // read
+                        setText(readCard());
+                        break;
+                    case 'A': // authenticate
+                        //setText(authenticate());
+                        break;
+                    case 'P':
+                        //setText(personalise());
+                        break;
+                    default:
+                        setText(sendKey((byte) c));
+                        break;
+                }
             }
         } catch (Exception e) {
+            System.out.println(e);
             System.out.println(MSG_ERROR);
         }
     }
