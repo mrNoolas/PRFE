@@ -23,21 +23,25 @@ private static final short READ_INC_LEN = 4;
 private static final short AUTH1_INC_LEN = 53; 
 private static final short AUTH2_INC_LEN = 200; // TODO update this
 private static final short REVOKE_INC_LENGTH = 24; // Sign length + nonce length
-private static final short CHAR1_INC_LEN = 8;
-private static final short CHAR2_INC_LEN = 22;
+
+private static final short CHAR1_INC_LEN = 56;
+private static final short CHAR2_INC_LEN = 64;
 private static final short CONS1_INC_LENGTH = 8;
 private static final short CONS2_INC_LENGTH = 22;
 private static final short CONS3_INC_LENGTH = 22;
 
 
+
 // Response lenghts
 private static final short READ_RESP_LEN = 8;
 private static final short AUTH1_RESP_LEN = 80;
-private static final short CHAR1_RESP_LEN = 22;
-private static final short CHAR2_RESP_LEN = 32;
+
+private static final short CHAR1_RESP_LEN = 64;
+private static final short CHAR2_RESP_LEN = 112;
 private static final short CONS1_RESP_LEN = 22;
 private static final short CONS2_RESP_LEN = 22;
 private static final short CONS3_RESP_LEN = 32;
+
 
 
 // keys
@@ -750,8 +754,8 @@ public void process(APDU apdu) throws ISOException, APDUException {
 		AESCipher.init(skey, Cipher.MODE_DECRYPT);
 		AESCipher.doFinal(buffer, (short) 0, SIGN_LENGTH, nonceT, (short) 0);
 		incNonce(nonceT);
-
-
+		tNum = (short) (tNum + 1);
+		
 		short expectedLength = apdu.setOutgoing();
         if (expectedLength < (short) CHAR1_RESP_LEN) ISOException.throwIt((short) (SW_WRONG_LENGTH | CHAR1_RESP_LEN));
         apdu.setOutgoingLength((byte) CHAR1_RESP_LEN);
@@ -760,10 +764,12 @@ public void process(APDU apdu) throws ISOException, APDUException {
 		buffer[(short) 5] = (byte) (petrolCredits & 0xff);
 		buffer[(short) 6] = (byte) ((petrolCredits >> 8) & 0xff);
 		incNonce(nonceT);
-		Util.arrayCopy(nonceT, (short) 0, buffer, (short) 6, (short) NONCE_LENGTH);
+		buffer[(short) 7] = (byte) (tNum & 0xff);
+		buffer[(short) 8] = (byte) ((tNum >> 8) & 0xff);
+		Util.arrayCopy(nonceT, (short) 0, buffer, (short) 8, (short) NONCE_LENGTH);
 		// hash the data?
 		signature.init(skey, Signature.MODE_SIGN);
-		signature.sign(buffer, (short) 0, (short) 14, buffer, (short) 6);
+		signature.sign(buffer, (short) 0, (short) 16, buffer, (short) 8);
 		
 		apdu.setOutgoingAndSend((short) 0, (short) CHAR1_RESP_LEN);
 		status[(short) 0] = (byte) (status[(short) 0] + 0x10);
@@ -783,7 +789,8 @@ public void process(APDU apdu) throws ISOException, APDUException {
 		 * Data:
 		 * 		4 bytes of cID
 		 * 		2 bytes of new quota
-		 *		16 bytes of signature of the data
+		 *      2 bytes of transaction number
+		 *		56 bytes of signature of the data
 		 */
 		short lc_length = apdu.setIncomingAndReceive();
         if (lc_length < (byte) CHAR2_INC_LEN) {
@@ -791,15 +798,14 @@ public void process(APDU apdu) throws ISOException, APDUException {
         }
 		
 		buffer = apdu.getBuffer();
-		Util.arrayCopy(buffer, (short) 0, sigBuffer, (short) 0, (short) 4);
-		Util.arrayCopy(buffer, (short) 4, sigBuffer, (short) 4, (short) 2);
+		Util.arrayCopy(buffer, (short) 0, sigBuffer, (short) 0, (short) 8);
 		incNonce(nonceT);
-		Util.arrayCopy(nonceT, (short) 0, sigBuffer, (short) 6, (short) NONCE_LENGTH);
+		Util.arrayCopy(nonceT, (short) 0, sigBuffer, (short) 8, (short) NONCE_LENGTH);
 		
 
 
 		signature.init(skey, Signature.MODE_VERIFY);
-		if(!signature.verify(sigBuff, (short) 0, (short) 14, buffer, (short) 14, SIGN_LENGTH)) {
+		if(!signature.verify(sigBuff, (short) 0, (short) 16, buffer, (short) 16, SIGN_LENGTH)) {
 			ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
 
 
@@ -814,7 +820,7 @@ public void process(APDU apdu) throws ISOException, APDUException {
         apdu.setOutgoingLength((byte) CHAR2_RESP_LEN);
 
 		Util.arrayCopy(cID, (short) 0, sigBuffer, (short) 0, (short) 4);
-		Util.arrayCopy(TCert, (short) 0, sigBuffer, (short) 4, (short) 16);
+		Util.arrayCopy(TCert, (short) 0, sigBuffer, (short) 4, (short) SIGN_LENGTH);
 		sigBuffer[(short) 20] = (byte) (petrolCredits & 0xff);
 		sigBuffer[(short) 21] = (byte) ((petrolCredits >> 8) & 0xff);
 		(short) tNum = (short) (tNum + 1);

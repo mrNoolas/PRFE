@@ -69,18 +69,23 @@ public class TChar extends JPanel implements ActionListener {
 	private ECPrivateKey prkTChar; // private key TChar
 	private ECPublicKey purkTChar; // public rekey key TChar
 	private ECPublicKey puks; // certificate verification key
-	private AESKey skey;
+
+	private AESKey skey; 
+	private Signature signature;
+	private Cipher AESCipher;
+
 	private byte[] TCert; // Terminal certificate
 
-		//Length constants
-		private static final short ID_LENGTH = 4;
-		private static final short NONCE_LENGTH = 8;
-		private static final short TID_LENGTH     = 4;
+	//Length constants
+	private static final short ID_LENGTH = 4;
+	private static final short NONCE_LENGTH = 8;
+	private static final short TID_LENGTH     = 4;
     private static final short NONCET_LENGTH  = 8;
     private static final short AES_KEY_LENGTH = 16;
-		private static final short SIGN_LENGTH = 16;
 
-		//Instruction bytes / General constants
+	private static final short SIGN_LENGTH = 56;
+	//Instruction bytes
+
     private static final byte PRFE_CLA = (byte) 0xB0;
     private static final byte READ_INS = (byte) 0x00;
     private static final byte AUTH_INS = (byte) 0x10;
@@ -94,7 +99,7 @@ public class TChar extends JPanel implements ActionListener {
     private static final byte T_SOFT_VERSION = (byte) 0x00;
     private static final byte[] T_ID = {(byte) 0x01, (byte) 0x01, (byte) 0x01, (byte) 0x01};
 
-		private short monthlyQuota;
+	private short monthlyQuota;
 
 
     //private JavaxSmartCardInterface simulatorInterface; // SIM
@@ -134,6 +139,10 @@ public class TChar extends JPanel implements ActionListener {
 		purkTChar = (ECPublicKey)  KeyBuilder.buildKey(KeyBuilder.TYPE_EC_F2M_PUBLIC,  KeyBuilder.LENGTH_EC_F2M_193, true);
 		puks      = (ECPublicKey)  KeyBuilder.buildKey(KeyBuilder.TYPE_EC_F2M_PUBLIC,  KeyBuilder.LENGTH_EC_F2M_193, true);
 		TCert     = null;
+
+		
+		signature = Signature.getInstance(Signature.ALG_ECDSA_SHA, false);
+		AESCipher = Cipher.getInstance(Cipher.ALG_AES_BLOCK_128_CBC_NOPAD, false);
 
 		tID = new byte[TID_LENGTH];
 		nonceT = new byte[NONCET_LENGTH];
@@ -190,8 +199,10 @@ public class TChar extends JPanel implements ActionListener {
 		// Terminal declines PIN: user is not authenticated
 	}
 
-	/*public void charge(CardApplet card) {
-		byte[] sigBuffer = new byte[(short) 16];
+	
+	public void charge(CardApplet card) {
+		byte[] sigBuffer = new byte[2*SIGN_LENGTH];
+
 		signature.init(skey, Signature.MODE_SIGN);
 		signature.sign(nonceT, (short) 0, (short) 8, sigBuffer, (short) 0);
 		CommandAPDU chargeCommand = new CommandAPDU((int) PRFE_CLA, (int) CHAR_INS, (int)TERMINAL_TYPE, (int)TERMINAL_SOFTWARE_VERSION, sigBuffer);
@@ -208,23 +219,31 @@ public class TChar extends JPanel implements ActionListener {
 
 		short petrolQuota = Util.getShort(data, (short) 4);
 
-		System.arrayCopy(data, 0, sigBuffer, 0, 6);
+		short tNum = Util.getShort(data, (short) 6);
+		
+		System.arrayCopy(data, 0, sigBuffer, 0, 8);
 		incNonce(nonceT);
-		System.arrayCopy(nonceT, 0, sigBuffer, 6, NONCET_LENGTH);
-
+		System.arrayCopy(nonceT, 0, sigBuffer, 8, NONCET_LENGTH);
+		
 		signature.init(skey, Signature.MODE_VERIFY);
-		if (!signature.verify(sigBuffer, 0, 14, data, 6, SIGN_LENGTH)) {
-			break;
+		if (!signature.verify(sigBuffer, 0, 16, data, 8, SIGN_LENGTH)) {
+			throw new Exception("Signature invalid");
+
 		}
 
 		short extraQuota = getMonthlyQuota(cardID);
 		data[4] = (byte) (extraQuota & 0xff);
 		data[5] = (byte) ((extraQuota >> 8) & 0xff);
+		
+		data[6] = (byte) (tNum & 0xff);
+		data[7] = (byte) ((tNum >> 8) & 0xff);
 		incNonce(nonceT);
-		System.arrayCopy(nonceT, 0, data, 6, NONCET_LENGTH);
+
+		System.arrayCopy(nonceT, 0, data, 8, NONCET_LENGTH);
+		
 
 		signature.init(skey, Signature.MODE_SIGN);
-		signature.sign(data, 0, 14, data, 6);
+		signature.sign(data, 0, 16, data, 8);
 		CommandAPDU chargeCommand = new CommandAPDU((int) PRFE_CLA, (int) CHAR_INS, (int) TERMINAL_TYPE, (int)TERMINAL_SOFTWARE_VERSION, data);
 		try {
 			ResponseAPDU response = applet.transmit(chargeCommand);
@@ -233,6 +252,25 @@ public class TChar extends JPanel implements ActionListener {
 			return 0;
 		}
 
+		
+		data = response.getData();
+		System.arrayCopy(cID, 0, sigBuffer, 0, 4);
+		System.arrayCopy(TCert, 0, sigBuffer, 4, SIGN_LENGTH);
+		petrolQuota += extraQuota;
+		sigBuffer[60] = (petrolQuota & 0xff);
+		sigBuffer[61] = ((petrolQuota >> 8) & 0xff);
+		sigBuffer[62] = (tNum & 0xff);
+		sigBuffer[63] = ((tNum >> 8) & 0xff);
+		
+		signature.init(skey, Signature.MODE_VERIFY);
+		if (!signature.verify(sigBuffer, 0, 64, data, 0, SIGN_LENGTH)) {
+			throw new Exception("Signature invalid");
+		}
+		
+		incNonce(nonceT);
+		if (!signature.verify(nonceT, 0, 8, data, SIGN_LENGTH, SIGN_LENGTH)) {
+			throw new Exception("Signature invalid");
+		}
 
 	}
 
