@@ -266,13 +266,36 @@ public class TCons extends JPanel implements ActionListener {
         return random.nextBytes(nonce);
     };
 
-    public void consumeQuota(int amount, int balance){                                                        //use an amount of petrol quota on the card
+    public void consumeQuota(){                                                        //use an amount of petrol quota on the card
         //TODO: implement method to update the quota on the card
+        //send sequence number to card to start the consumption transaction
+        byte[] nonceT = generateNonce();
+        byte[] encryptedData = encryptAES(nonceT, skey);
+        CommandAPDU consumeCommand = new CommandAPDU(PRFE_CLA, CONS_INS, T_TYPE, T_SOFT_VERSION, encryptedData);
+
+        ResponseAPDU response;
+        try {
+            //card sends back apdu with the data after transmitting the commandAPDU to the card
+            response = applet.transmit(readCommand);
+        } catch (CardException e) {
+            // TODO: do something with the exception
+            System.out.println(e);
+            return 0;
+        }
+
+        //verify response
+        byte[] data = response.getData();
+        //data = card-id, quota, signedData
+        ByteBuffer cardData = ByteBuffer.wrap(data);
+        byte[] cardID = new byte[4];
+        cardData.get(cardID, 0, 4);
+        short petrolQuotaOnCard = cardData.getShort(4);
+
 
         //amount = entered by the buyer
         //card has quota balance
         if (balance - amount < 0){
-            return;
+            return 0;
         }
         //if quota on card - amount < 0 : exit
         //else
@@ -313,7 +336,7 @@ public class TCons extends JPanel implements ActionListener {
 
     public byte[] mac(byte[] data, AESKey key){                                                                              //mac code for sending data between card and terminal, using java.crypto.Mac object?
         //create mac object
-        Mac mac = Mac.getInstance("SHA-1"); //TODO: algorithm for mac? -> SHA-1 outputs 20 bytes
+        Mac mac = Mac.getInstance("SHA-1"); //TODO: algorithm for mac?
         //initialise the Mac object with the skey
         mac.init(key);
         //compute mac
