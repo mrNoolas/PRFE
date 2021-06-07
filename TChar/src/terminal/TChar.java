@@ -321,9 +321,9 @@ public class TChar extends JPanel implements ActionListener {
 				display.setForeground(Color.green);
 				add(display, BorderLayout.NORTH);
 				keypad = new JPanel(new GridLayout(5, 5));
-				key("Personalise");
 				key("Read");
 				key("Authenticate");
+        key(null);
 				key(null);
 				key("C");
 				key("7");
@@ -524,9 +524,6 @@ public class TChar extends JPanel implements ActionListener {
                         break;
                     case 'A': // authenticate
                         //setText(authenticate());
-                        break;
-                    case 'P':
-                        //setText(personalise());
                         break;
                     default:
                         setText(sendKey((byte) c));
