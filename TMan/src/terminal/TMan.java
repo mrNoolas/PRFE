@@ -22,6 +22,7 @@ import java.util.List;
 import java.util.Arrays;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.security.SecureRandom;
 
 import javax.smartcardio.Card;
 import javax.smartcardio.CardChannel;
@@ -412,7 +413,7 @@ public class TMan extends JPanel implements ActionListener {
 
     public String personalise () {
         byte[] buffer0 = new byte[228];
-        byte[] buffer1 = new byte[132];
+        byte[] buffer1 = new byte[172];
 
         /**
          * TODO: put this in report:
@@ -438,14 +439,32 @@ public class TMan extends JPanel implements ActionListener {
         ((ECPublicKey) ReCard.getPublic()).getW(buffer1, (short) 0);
         ((ECPublicKey) Server.getPublic()).getW(buffer1, (short) 51);
 
-        // generate CCert
-        signature.init(Server.getPrivate(), MODE_SIGN);
-        signature.update(T_ID, (short) 0, (short) 4);
-        signature.update(new byte[] {T_TYPE}, (short) 0, (short) 1);
-        System.out.println(signature.sign(CCertExp, (short) 0, (short) 4, buffer1, (short) 102));
+        // generate cardID
+        byte[] cardID = new byte[] {(byte) 0xde, (byte) 0xad, (byte) 0xbe, (byte) 0xef};
 
-        //Pin
+        // generate CCert
+        signature.init(Server.getPrivate(), Signature.MODE_SIGN);
+        signature.update(cardID, (short) 0, (short) 4);
+        signature.update(new byte[] {0x00}, (short) 0, (short) 1);
+        signature.sign(CCertExp, (short) 0, (short) 4, buffer1, (short) 102); // outputs 54, 55 or 56 bytes of signature data
+
+        System.arraycopy(CCertExp, 0, buffer1, 158, 4);
+        System.arraycopy(cardID, 0, buffer1, 162, 4);
         
+        // Generate random 6 digit pin using SecureRandom
+        byte[] pin = new byte[6];
+        SecureRandom random = new SecureRandom();
+        int pinInt = random.nextInt(1000000);
+        
+        pin[0] = (byte) (pinInt - (pinInt % 100000));
+        pin[1] = (byte) ((pinInt % 100000) - (pinInt % 10000));
+        pin[2] = (byte) ((pinInt % 10000) - (pinInt % 1000));
+        pin[3] = (byte) ((pinInt % 1000) - (pinInt % 100));
+        pin[4] = (byte) ((pinInt % 100) - (pinInt % 10));
+        pin[5] = (byte) (pinInt % 10);
+        System.arraycopy(pin, 0, buffer1, 166, 6);
+        
+
         ResponseAPDU response;
         CommandAPDU readCommand = new CommandAPDU(PRFE_CLA, PERS_INS, (byte) 1, T_SOFT_VERSION, buffer0, 0, 228, 228);
         try {
@@ -464,7 +483,7 @@ public class TMan extends JPanel implements ActionListener {
         data = response.getData();
         byte[] dataTrunc = Arrays.copyOfRange(data, 0, 228);
         if (!Arrays.equals(buffer0, dataTrunc)) {
-            for (int i = 0; i < 132; i++) {
+            for (int i = 0; i < 172; i++) {
                 if (buffer0[i] != dataTrunc[i]) {
                     System.out.printf("%d %x %x \n", i, buffer0[i], dataTrunc[i]);
                 }
@@ -472,7 +491,7 @@ public class TMan extends JPanel implements ActionListener {
             return "ERROR: Card readback 0 incorrect!";
         }
 
-        readCommand = new CommandAPDU(PRFE_CLA, PERS_INS, (byte) 0b00000011, T_SOFT_VERSION, buffer1, 0, 132, 132);
+        readCommand = new CommandAPDU(PRFE_CLA, PERS_INS, (byte) 0b00000011, T_SOFT_VERSION, buffer1, 0, 172, 172);
         try {
             //card sends back apdu with the data after transmitting the commandAPDU to the card
             response = applet.transmit(readCommand);
@@ -483,13 +502,13 @@ public class TMan extends JPanel implements ActionListener {
         }
         // Check that the response is the same as what was sent:
         data = response.getData(); 
-        byte[] dataTrunc1 = Arrays.copyOfRange(data, 0, 132);
+        byte[] dataTrunc1 = Arrays.copyOfRange(data, 0, 172);
         if (!Arrays.equals(buffer1, dataTrunc1)) {
-            for (int i = 0; i < 132; i++) {
+            /*for (int i = 0; i < 172; i++) {
                 if (buffer1[i] != dataTrunc1[i]) {
                     System.out.printf("%d %x %x \n", i, buffer1[i], dataTrunc1[i]);
                 }
-            }
+            }*/
             return "ERROR: Card readback 1 incorrect!";
         }
 

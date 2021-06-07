@@ -18,7 +18,7 @@ private static final short MAX_PETROL_CREDITS = (short) 10000;
 
 // Incoming expected data block lengths
 private static final short PERS_INC_LEN0 = 228;
-private static final short PERS_INC_LEN1 = 132;
+private static final short PERS_INC_LEN1 = 172;
 private static final short READ_INC_LEN = 4;
 private static final short AUTH1_INC_LEN = 53; 
 private static final short AUTH2_INC_LEN = 200; // TODO update this
@@ -66,17 +66,19 @@ private static final short PRKC_PERS_OFFSET = 209;
 private static final short PURKC_PERS_OFFSET = 5;
 private static final short PUKS_PERS_OFFSET = 56;
 private static final short CCERT_PERS_OFFSET = 107;
-private static final short CCERT_EXP_PERS_OFFSET = 127;
-private static final short PIN_PERS_OFFSET = 131;
+private static final short CCERT_EXP_PERS_OFFSET = 163;
+private static final short CID_PERS_OFFSET = 167;
+private static final short PIN_PERS_OFFSET = 171;
 
 // some lengths in bytes
 private static final short EC_PUB_KEY_LENGTH = 51;
 private static final short EC_PRIV_KEY_LENGTH = 24;
-private static final short EC_CERT_LENGTH = 20;
+private static final short EC_CERT_LENGTH = 56;
 private static final short AES_KEY_LENGTH = 16;
 private static final short SIGN_LENGTH = 16;
 private static final short DATE_LENGTH = 4;
 private static final short TIME_LENGTH = (short) (DATE_LENGTH + (short) 3);
+private static final short ID_LENGTH = 4;
 private static final short NONCE_LENGTH = 8;
 
 
@@ -94,6 +96,7 @@ private boolean manageable = true;
 
 // Terminal information
 private static final byte TERM_TYPE_CARD = 0x00;
+private static final byte[] TYPE_CARD_A = {(byte) 0x00};
 private static final byte TERM_TYPE_TMAN = 0x01;
 private static final byte TERM_TYPE_TCHAR = 0x02;
 private static final byte TERM_TYPE_TCONS = 0x03;
@@ -159,7 +162,6 @@ public CardApplet() {
     random = RandomData.getInstance(RandomData.ALG_SECURE_RANDOM);
 
     cID = new byte[4];
-    cID = new byte[] {(byte) 0xde, (byte) 0xad, (byte) 0xbe, (byte) 0xef}; // TODO: remove this test-data and use only personalise
     tInfo = JCSystem.makeTransientByteArray((short) 6, JCSystem.CLEAR_ON_RESET);
     
     select(); // Reset status and tInfo
@@ -333,13 +335,12 @@ public void process(APDU apdu) throws ISOException, APDUException {
          * Data: (bb = 01)
          *      51 bytes purkc
          *      51 bytes puks
-         *      20 bytes CCert
+         *      56 bytes CCert
          *      4 bytes CCertExp
          *      6 bytes of pin
          */
         if (manageable) {
             manageable = (buffer[OFFSET_P1] & 0x01) == 0x01;
-            System.out.println(manageable);
             tInfo[(short) 1] = buffer[OFFSET_P2];
 
             lc_length = apdu.setIncomingAndReceive();
@@ -700,12 +701,23 @@ public void process(APDU apdu) throws ISOException, APDUException {
         purkc.setW(buffer, PURKC_PERS_OFFSET, EC_PUB_KEY_LENGTH);
         puks.setW(buffer, PUKS_PERS_OFFSET, EC_PUB_KEY_LENGTH);
         
-        //if (true /* TODO: verify card ID and type card and exp date in CCert */) {
-         /*   Util.arrayCopy(buffer, CCERT_PERS_OFFSET, CCert, (short) 0, EC_CERT_LENGTH);
-            Util.arrayCopy(buffer, CCERT_EXP_PERS_OFFSET, CCertExp, (short) 0, DATE_LENGTH);
+        // get CCert and its information
+        Util.arrayCopy(buffer, CCERT_PERS_OFFSET, CCert, (short) 0, EC_CERT_LENGTH);
+        Util.arrayCopy(buffer, CCERT_EXP_PERS_OFFSET, CCertExp, (short) 0, DATE_LENGTH);
+        Util.arrayCopy(buffer, CID_PERS_OFFSET, cID, (short) 0, ID_LENGTH);
+
+        // verify signature
+        signature.init(puks, Signature.MODE_VERIFY);
+        signature.update(cID, (short) 0, (short) 4);
+        signature.update(TYPE_CARD_A, (short) 0, (short) 1);
+        
+        if (!signature.verify(CCertExp, (short) 0, (short) DATE_LENGTH, CCert, (short) 0, (short) 56)) {
+            System.out.println("Signature not verifiable");
+            JCSystem.abortTransaction();
+            ISOException.throwIt(SW_WARNING_STATE_UNCHANGED);
         }
 
-        pin.update(buffer, PIN_PERS_OFFSET, PIN_SIZE);*/
+        pin.update(buffer, PIN_PERS_OFFSET, PIN_SIZE);
         JCSystem.commitTransaction();
 
         // Readback to ensure correct receiving, no bitrot
