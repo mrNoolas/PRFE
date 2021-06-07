@@ -1,7 +1,10 @@
 package terminal;
 
+import javacard.security.*;
+import javacard.framework.*;
 import javacard.framework.AID;
 import javacard.framework.ISO7816;
+import javacardx.crypto.*;
 
 import java.awt.BorderLayout;
 import java.awt.Color;
@@ -30,11 +33,9 @@ import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JTextField;
 
-import javacard.security.*;
-import javax.crypto.*;
-// imports for using JCardSim 
-//import com.licel.jcardsim.io.JavaxSmartCardInterface; 
-//import com.licel.jcardsim.smartcardio.JCardSimProvider; 
+// imports for using JCardSim
+//import com.licel.jcardsim.io.JavaxSmartCardInterface;
+//import com.licel.jcardsim.smartcardio.JCardSimProvider;
 import com.licel.jcardsim.smartcardio.CardTerminalSimulator;
 import com.licel.jcardsim.smartcardio.CardSimulator;
 
@@ -44,12 +45,12 @@ import applet.CardApplet;
  * Sample terminal for the Calculator applet.
  *
  * Code added for hooking in the simulator is marked with SIM
- * 
+ *
  * @author Martijno
  * @author woj
  * @author Pim Vullers
  * @author erikpoll
- * 
+ *
  */
 public class TCons extends JPanel implements ActionListener {
 
@@ -62,6 +63,7 @@ public class TCons extends JPanel implements ActionListener {
 
 
     //keys
+    private KeyPair keyExchangeKP;
     private ECPublicKey pukc;             // public key Card
     private ECPrivateKey prkTCons;        // private key TCons
     private ECPublicKey purkTCons;        // public rekey TCons
@@ -71,6 +73,8 @@ public class TCons extends JPanel implements ActionListener {
     private AESKey skey;                  // Session key
 
     //length constants
+		private static final short ID_LENGTH = 4;
+		private static final short NONCE_LENGTH = 8;
     private static final short TID_LENGTH     = 4;
     private static final short NONCET_LENGTH  = 8;
     private static final short AES_KEY_LENGTH = 16;
@@ -87,6 +91,12 @@ public class TCons extends JPanel implements ActionListener {
     private static final byte AUTH_INS = (byte) 0x10;
     private static final byte CONS_INS = (byte) 0x30;
     private static final byte REV_INS  = (byte) 0x40;
+
+
+    // Data about this terminal:
+    private static final byte T_TYPE = (byte) 0x03;
+    private static final byte T_SOFT_VERSION = (byte) 0x00;
+    private static final byte[] T_ID = {(byte) 0x01, (byte) 0x01, (byte) 0x01, (byte) 0x01};
 
     //private JavaxSmartCardInterface simulatorInterface; // SIM
 
@@ -106,7 +116,7 @@ public class TCons extends JPanel implements ActionListener {
 
     static final CommandAPDU SELECT_APDU = new CommandAPDU(
     		(byte) 0x00, (byte) 0xA4, (byte) 0x04, (byte) 0x00, CALC_APPLET_AID);
-    
+
     JTextField display;
     JPanel keypad;
 
@@ -139,18 +149,44 @@ public class TCons extends JPanel implements ActionListener {
 
     //functions
 
-    public void readCard(){                                                 //default method, read information on card
+    public int readCard() {                                                 //default method, read information on card
         //construct a commandAPDU with the INS byte for read and the terminal info
-        CommandAPDU readCommand = new CommandAPDU((byte) PRFE_CLA, (byte) READ_INS, (byte)TERMINAL_TYPE, (byte)TERMINAL_SOFTWARE_VERSION);
-        //card sends back apdu with the data after transmitting the commandAPDU to the card
-        ResponseAPDU response = applet.transmit(readCommand);
-        //process the response apdu
-        byte[] responseBytes = response.getBytes();
-        byte[] data = response.getData(); //data for read command is the card id and the petrol credits?
+        CommandAPDU readCommand = new CommandAPDU(PRFE_CLA, READ_INS, T_TYPE, T_SOFT_VERSION, T_ID, 0, ID_LENGTH, 8);
+
+        ResponseAPDU response;
+        try {
+            //card sends back apdu with the data after transmitting the commandAPDU to the card
+            response = applet.transmit(readCommand);
+        } catch (CardException e) {
+            // TODO: do something with the exception
+            System.out.println(e);
+            return 0;
+        }
+
+
+        /*
+         * process the response apdu
+         *
+         * data:
+         *  1 byte card type
+         *  1 byte card software version
+         *  4 bytes card ID
+         *  2 bytes petrolcredits
+         */
+        byte[] data = response.getData();
+
+        byte cardType = data[0];
+        byte cardSoftVers = data[1];
+
         byte[] cardID = new byte[4];
-        Util.arrayCopy(data, (short) 0, cardID, (short) 0, (short) 4);
-        short petrolCredits = Util.getShort(data, (short) 4);
-    };
+        System.arraycopy(data, 2, cardID, 0, 4);
+
+        short petrolQuota = Util.getShort(data, (short) 6);
+
+        System.out.printf("Read response from Card: Type: %x; Soft Vers: %x; ID: %x%x%x%x; Petrolquota: %x \n",
+                cardType, cardSoftVers, cardID[0], cardID[1], cardID[2], cardID[3], petrolQuota);
+        return (int) petrolQuota;
+    }
 
     public byte[] getCardData(ResponseAPDU response){
         byte[] data = response.getData();
@@ -170,7 +206,7 @@ public class TCons extends JPanel implements ActionListener {
         return 0;
     };
 
-    public void authenticateCard(){                                                         //authenticate card before we perform any transactions
+    /*public void authenticateCard(){                                                         //authenticate card before we perform any transactions
         //generate nonceT
        // byte[] nonceT = generateNonce();
         //data to be sent in the apdu: tID, skeyT, sign({tID, skeyT}, prkTCons)
@@ -222,21 +258,44 @@ public class TCons extends JPanel implements ActionListener {
         if pin not verified, try new pin
         if pin tries remaining = 0 and pin != verified, revoke card and exit.
          */
-    }
+    //}
 
-    public byte[] generateNonce(){
+    /*public byte[] generateNonce(){
         //generate a 32 bit random nonce
         byte[] nonce = new byte[NONCET_LENGTH];
         return random.nextBytes(nonce);
     };
 
-    public void consumeQuota(int amount, int balance){                                                        //use an amount of petrol quota on the card
+    public void consumeQuota(){                                                        //use an amount of petrol quota on the card
         //TODO: implement method to update the quota on the card
+        //send sequence number to card to start the consumption transaction
+        byte[] nonceT = generateNonce();
+        byte[] encryptedData = encryptAES(nonceT, skey);
+        CommandAPDU consumeCommand = new CommandAPDU(PRFE_CLA, CONS_INS, T_TYPE, T_SOFT_VERSION, encryptedData);
+
+        ResponseAPDU response;
+        try {
+            //card sends back apdu with the data after transmitting the commandAPDU to the card
+            response = applet.transmit(readCommand);
+        } catch (CardException e) {
+            // TODO: do something with the exception
+            System.out.println(e);
+            return 0;
+        }
+
+        //verify response
+        byte[] data = response.getData();
+        //data = card-id, quota, signedData
+        ByteBuffer cardData = ByteBuffer.wrap(data);
+        byte[] cardID = new byte[4];
+        cardData.get(cardID, 0, 4);
+        short petrolQuotaOnCard = cardData.getShort(4);
+
 
         //amount = entered by the buyer
         //card has quota balance
         if (balance - amount < 0){
-            return;
+            return 0;
         }
         //if quota on card - amount < 0 : exit
         //else
@@ -266,7 +325,7 @@ public class TCons extends JPanel implements ActionListener {
 
     public byte[] hash(byte[] data){
         //create message digest using a certain hash algorithm
-        MessageDigest md = MessageDigest.getInstance("") //TODO: decide hash algorithm?
+        MessageDigest md = MessageDigest.getInstance(""); //TODO: decide hash algorithm?
         //use hash to hash the data
         md.update(data);
         //generate the hash of the data
@@ -277,7 +336,7 @@ public class TCons extends JPanel implements ActionListener {
 
     public byte[] mac(byte[] data, AESKey key){                                                                              //mac code for sending data between card and terminal, using java.crypto.Mac object?
         //create mac object
-        Mac mac = Mac.getInstance("SHA-1"); //TODO: algorithm for mac? -> SHA-1 outputs 20 bytes
+        Mac mac = Mac.getInstance("SHA-1"); //TODO: algorithm for mac?
         //initialise the Mac object with the skey
         mac.init(key);
         //compute mac
@@ -303,8 +362,7 @@ public class TCons extends JPanel implements ActionListener {
         cipher.init(Cipher.DECRYPT_MODE, key);
         byte[] decryptedMessage = cipher.doFinal(encryptedMessage);
         return decryptedMessage;
-    }
-
+    }*/
 
 
     //original terminal code starts here
@@ -319,8 +377,8 @@ public class TCons extends JPanel implements ActionListener {
         display.setForeground(Color.green);
         add(display, BorderLayout.NORTH);
         keypad = new JPanel(new GridLayout(5, 5));
-        key(null);
-        key(null);
+        key("Read");
+        key("Authenticate");
         key(null);
         key(null);
         key("C");
@@ -422,10 +480,10 @@ public class TCons extends JPanel implements ActionListener {
 
           // Insert Card into "My terminal 1"
           simulator.assignToTerminal(terminal1);
-                
+
           try {
             Card card = terminal1.connect("*");
-    	    	
+
     	    applet = card.getBasicChannel();
     	    ResponseAPDU resp = applet.transmit(SELECT_APDU);
     	    if (resp.getSW() != 0x9000) {
@@ -444,9 +502,21 @@ public class TCons extends JPanel implements ActionListener {
             Object src = ae.getSource();
             if (src instanceof JButton) {
                 char c = ((JButton) src).getText().charAt(0);
-                setText(sendKey((byte) c));
+
+                switch(c) {
+                    case 'R': // read
+                        setText(readCard());
+                        break;
+                    case 'A': // authenticate
+                        //setText(authenticate());
+                        break;
+                    default:
+                        setText(sendKey((byte) c));
+                        break;
+                }
             }
         } catch (Exception e) {
+            System.out.println(e);
             System.out.println(MSG_ERROR);
         }
     }
