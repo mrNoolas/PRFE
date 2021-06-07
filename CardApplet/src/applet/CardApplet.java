@@ -37,6 +37,7 @@ private static final short CHAR1_RESP_LEN = 22;
 private static final short CHAR2_RESP_LEN = 32;
 private static final short CONS1_RESP_LEN = 22;
 private static final short CONS2_RESP_LEN = 22;
+private static final short CONS3_RESP_LEN = 32;
 
 
 // keys
