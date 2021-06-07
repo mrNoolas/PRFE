@@ -51,8 +51,11 @@ private ECPrivateKey prkc;       // private key Card
 private ECPublicKey purkc;      // public rekey Card
 private ECPublicKey puks;       // Server certificate verification key
 private KeyPair keyExchangeKP;  // Used for generating new random keys for a key exchange. Resulting key is used as AES session key.
-private byte[] CCert;           // Server certificate
-private byte[] CCertExp;       // Expiration date of the certificate
+
+private byte[] CCert;           // Server certificate signing CID, CType, and CCertExp
+private byte[] CCertExp;       // Expiration date of the certificate yymd 4 bytes
+private byte[] TCert;           // Server certificate signing TID, TType and TCertExp
+private byte[] TCertExp;        // Exp date of the certificate yymd, 4 bytes
 
 // Key offsets in personalisation messages:
 private static final short PUKTMAN_PERS_OFFSET = 5;
@@ -107,7 +110,6 @@ private byte[] keyExchBuffer;
 private byte[] sigBuffer;
 
 private short petrolCredits;
-private short incomingPetrolQuota;
 
 private Object[] transactionLog;
 private byte[] lastKnownTime;
@@ -145,7 +147,8 @@ public CardApplet() {
     puks     = (ECPublicKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_F2M_PUBLIC, KeyBuilder.LENGTH_EC_F2M_193, true);       // Server certificate verification key
     keyExchangeKP = new KeyPair(KeyPair.ALG_EC_FP, (short) 128); // Use 128 for easy match with AES 128
 
-    tCert = JCSystem.makeTransientByteArray(SIGN_LENGTH, JCSystem.CLEAR_ON_RESET);
+    TCert = JCSystem.makeTransientByteArray(EC_CERT_LENGTH, JCSystem.CLEAR_ON_RESET);
+    TCertExp = JCSystem.makeTransientByteArray(DATE_LENGTH, JCSystem.CLEAR_ON_RESET);
     CCert = new byte[EC_CERT_LENGTH];      // Server certificate verification key
     CCertExp = new byte[DATE_LENGTH];   // Date, yymd
     lastKnownTime = new byte[TIME_LENGTH]; // Date and time, yymdhms
@@ -253,6 +256,8 @@ public void process(APDU apdu) throws ISOException, APDUException {
         * Data: encryption of NonceT
         */
 /* TODO: sorry, I added this for some testing... (Also look at the break at the end. Cheers, David
+        if(!checkAndCopyTypeAndVersion(buffer)) ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
+
         if(!checkAndCopyTypeAndVersion(buffer)) {
             //reset status:
             select();
@@ -845,6 +850,7 @@ public void process(APDU apdu) throws ISOException, APDUException {
     }
 
     private void consumePhase1(APDU apdu, byte[] buffer) {
+        /*
         lc_length = apdu.setIncomingAndReceive();
         if (lc_length < (byte) CONS1_INC_LENGTH) {
             ISOException.throwIt((short) (SW_WRONG_LENGTH | CONS1_INC_LENGTH));
@@ -856,10 +862,10 @@ public void process(APDU apdu) throws ISOException, APDUException {
         AESCipher.init(skey, Cipher.MODE_DECRYPT);
         AESCipher.doFinal(buffer, (short) 0, (short) 8, nonceT, (short) 0);
 
-        /*card sends back to the terminal:
+        //card sends back to the terminal:
         card-id (4 bytes), petrolcredits (short), mac(hash{card-id, petrolCredits, incNonce(nonceT)}, skey)
         -> signature length is 20 bytes
-        */
+
 
         nonceC = incNonce(nonceT);
         //hashedData = hash(card-id, petrolCredits, nonceC) -> hashing algorithm? SHA-1?
@@ -892,10 +898,11 @@ public void process(APDU apdu) throws ISOException, APDUException {
 
         apdu.sendBytes((short) 0, (short) CONS1_RESP_LEN);
         status[(short) 0] = (byte) (status[(short) 0] + 0x10);
-
+*/
     }
 
     private void consumePhase2(APDU apdu, byte[] buffer){
+        /*
         lc_length = apdu.setIncomingAndReceive();
         if (lc_length < (byte) CONS2_INC_LENGTH) {
             ISOException.throwIt((short) (SW_WRONG_LENGTH | CONS2_INC_LENGTH));
@@ -954,11 +961,11 @@ public void process(APDU apdu) throws ISOException, APDUException {
 
         apdu.sendBytes((short) 0, (short) CONS2_RESP_LEN);
         status[(short) 0] = (byte) (status[(short) 0] + 0x20);
-
+*/
     }
 
     private void consumePhase3(APDU apdu, byte[] buffer){
-
+/*
         lc_length = apdu.setIncomingAndReceive();
         if (lc_length < (byte) CONS3_INC_LENGTH) {
             ISOException.throwIt((short) (SW_WRONG_LENGTH | CONS3_INC_LENGTH));
@@ -969,16 +976,18 @@ public void process(APDU apdu) throws ISOException, APDUException {
         nonceT = incNonce(nonceC);
         nonceC = incNonce(nonceT);
 
+        ByteBuffer data = ByteBuffer.wrap(buffer);
 
         short incomingPetrolQuota = (short) data.getShort((short) 4); //read the short value after the card-id
 
         byte[] dataToVerify = JCSystem.makeTransientByteArray((short) 14, JCSystem.CLEAR_ON_RESET);
-        Util.arrayCopyNonAtomic(buffer, (short) 0, sigBuffer, (short) 0, (short) 4); //copy card-id
-        Util.setShort(sigBuffer, (short) 4, incomingPetrolQuota); //set incoming petrol credit value
-        Util.arrayCopyNonAtomic(buffer, (short) 6, sigBuffer, (short) 0, (short) 8); //sequence number
+        Util.arrayCopyNonAtomic(buffer, (short) 0, dataToVerify, (short) 0, (short) 4); //copy card-id
+        Util.setShort(dataToVerify, (short) 4, incomingPetrolQuota); //set incoming petrol credit value
+        Util.arrayCopyNonAtomic(buffer, (short) 6, nonceT, (short) 0, (short) 8); //sequence number
 
-        signature.init(skey, Signature.MODE_VERIFY);
-        boolean verified = signature.verify(sigBuffer, (short) 0, (short) 14, buffer, (short) 6, (short) 16); //TODO: change signature length
+        mac = Signature.getInstance(MessageDigest.ALG_NULL, SIG_CIPHER_AES_CMAC_128, Cipher.PAD_ISO9797_M2);
+        mac.init(skey, Signature.MODE_VERIFY);
+        boolean verified = signature.verify(dataToVerify, (short) 0, (short) 14, data, (short) 6, (short) 16);
 
         if(verified){
             if ((short) incomingPetrolQuota < (short) petrolCredits){
@@ -990,10 +999,10 @@ public void process(APDU apdu) throws ISOException, APDUException {
             apdu.setOutgoingLength((byte) CONS3_RESP_LEN);
 
             //send to terminal: two signatures
-            /*
-            mac(hash({card-id, TCert, petrolCredits, transaction_nr}, skey)
-            mac({nonceC}, skey)
-             */
+
+            //mac(hash({card-id, TCert, petrolCredits, transaction_nr}, skey)
+            //mac({nonceC}, skey)
+
 
             Util.arrayCopy(cID, (short) 0, sigBuffer, (short) 0, (short) 4);
             Util.arrayCopy(TCert, (short) 0, sigBuffer, (short) 4, (short) 16); //TODO: TCert length
@@ -1020,7 +1029,7 @@ public void process(APDU apdu) throws ISOException, APDUException {
             select();
             ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
         }
-
+*/
     }
 
 	/**
