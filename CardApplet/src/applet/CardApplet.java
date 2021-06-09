@@ -823,8 +823,8 @@ public void process(APDU apdu) throws ISOException, APDUException {
 
 
 		}
-		petrolCredits = (short) (petrolCredits + buffer[(short) 5);
-		petrolCredits = (short) (petrolCredits + (buffer[(short) 6) << 8);
+		petrolCredits = (short) (petrolCredits + buffer[(short) 5]);
+		petrolCredits = (short) (petrolCredits + (buffer[(short) 6]<< 8));
 
 		
 		short expectedLength = apdu.setOutgoing();
