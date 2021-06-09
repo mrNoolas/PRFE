@@ -20,7 +20,7 @@ private static final short MAX_PETROL_CREDITS = (short) 10000;
 private static final short PERS_INC_LEN0 = 228;
 private static final short PERS_INC_LEN1 = 172;
 private static final short READ_INC_LEN = 4;
-private static final short AUTH1_INC_LEN = 53; 
+private static final short AUTH1_INC_LEN = 93; 
 private static final short AUTH2_INC_LEN = 200; // TODO update this
 private static final short REVOKE_INC_LENGTH = 24; // Sign length + nonce length
 
@@ -34,7 +34,7 @@ private static final short CONS3_INC_LENGTH = 22;
 
 // Response lenghts
 private static final short READ_RESP_LEN = 8;
-private static final short AUTH1_RESP_LEN = 80;
+private static final short AUTH1_RESP_LEN = 161;
 
 private static final short CHAR1_RESP_LEN = 64;
 private static final short CHAR2_RESP_LEN = 112;
@@ -78,9 +78,8 @@ private static final short PIN_PERS_OFFSET = 171;
 // some lengths in bytes
 private static final short EC_PUB_KEY_LENGTH = 51;
 private static final short EC_PRIV_KEY_LENGTH = 24;
-private static final short EC_CERT_LENGTH = 56;
 private static final short AES_KEY_LENGTH = 16;
-private static final short SIGN_LENGTH = 16;
+private static final short SIGN_LENGTH = 56;
 private static final short DATE_LENGTH = 4;
 private static final short TIME_LENGTH = (short) (DATE_LENGTH + (short) 3);
 private static final short ID_LENGTH = 4;
@@ -93,8 +92,8 @@ private Signature signature;
 private RandomData random;
 
 // Other offsets
-private static final short SK_EXCH_PUBLIC_OFFSET = 4;
-private static final short SK_EXCH_SIG1_OFFSET = SK_EXCH_PUBLIC_OFFSET + AES_KEY_LENGTH;
+private static final short SK_EXCH_PUBLIC_OFFSET = 9;
+private static final short SK_EXCH_SIG1_OFFSET = SK_EXCH_PUBLIC_OFFSET + 33;
 
 // Determines whether the card is in personalisation phase
 private boolean manageable = true;
@@ -154,9 +153,9 @@ public CardApplet() {
     puks     = (ECPublicKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_F2M_PUBLIC, KeyBuilder.LENGTH_EC_F2M_193, true);       // Server certificate verification key
     keyExchangeKP = new KeyPair(KeyPair.ALG_EC_FP, (short) 128); // Use 128 for easy match with AES 128
 
-    TCert = JCSystem.makeTransientByteArray(EC_CERT_LENGTH, JCSystem.CLEAR_ON_RESET);
+    TCert = JCSystem.makeTransientByteArray(SIGN_LENGTH, JCSystem.CLEAR_ON_RESET);
     TCertExp = JCSystem.makeTransientByteArray(DATE_LENGTH, JCSystem.CLEAR_ON_RESET);
-    CCert = new byte[EC_CERT_LENGTH];      // Server certificate verification key
+    CCert = new byte[SIGN_LENGTH];      // Server certificate verification key
     CCertExp = new byte[DATE_LENGTH];   // Date, yymd
     lastKnownTime = new byte[TIME_LENGTH]; // Date and time, yymdhms
 
@@ -172,12 +171,8 @@ public CardApplet() {
     select(); // Reset status and tInfo
 
     petrolCredits = (short) 1;
-    incomingPetrolQuota = (short) 0;
+    short incomingPetrolQuota = (short) 0;
 
-    /*xy = JCSystem.makeTransientShortArray((short) 2, JCSystem.CLEAR_ON_RESET);
-    lastOp = JCSystem.makeTransientByteArray((short) 1, JCSystem.CLEAR_ON_RESET);
-    lastKeyWasDigit = JCSystem.makeTransientBooleanArray((short) 1, JCSystem.CLEAR_ON_RESET);
-    m = 0;*/
     register();
 }
 
@@ -425,14 +420,8 @@ public void process(APDU apdu) throws ISOException, APDUException {
         // Any remaining carry is just ignored.
     }
 
-    /**
-     * Convenience function for using the signature object.
-     *
-     * Initialises in MODE_VERIFY using the key that fits the type of terminal that is currently selected.
-     * Then it tries to verify the signature and buffer using the terminal key: throws ISOException.SW_SECURITY_STATUS_NOT_SATISFIED exception if signature fails.
-     */
-    private void termVerif (byte[] inBuff, short inOffset, short inLength, byte[] sigBuff, short sigOffset) {
-        switch(tInfo[(short) 0]) { // Switch on terminal type
+    private void termVerifInit (byte tType) {
+        switch(tType) { // Switch on terminal type
             case TERM_TYPE_TMAN:
                 signature.init(pukTMan, Signature.MODE_VERIFY);
                 break;
@@ -447,6 +436,16 @@ public void process(APDU apdu) throws ISOException, APDUException {
                 ISOException.throwIt(SW_FUNC_NOT_SUPPORTED);
                 break;
         }
+    }
+
+    /**
+     * Convenience function for using the signature object.
+     *
+     * Initialises in MODE_VERIFY using the key that fits the type of terminal that is currently selected.
+     * Then it tries to verify the signature and buffer using the terminal key: throws ISOException.SW_SECURITY_STATUS_NOT_SATISFIED exception if signature fails.
+     */
+    private void termVerif (byte[] inBuff, short inOffset, short inLength, byte[] sigBuff, short sigOffset) {
+        termVerifInit(tInfo[(short) 0]);
         
         if (!signature.verify(inBuff, inOffset, inLength, sigBuff, sigOffset, SIGN_LENGTH)) {
             select(); // reset
@@ -526,22 +525,30 @@ public void process(APDU apdu) throws ISOException, APDUException {
     private void authenticatePhase1 (APDU apdu, byte[] buffer) {
         // First get and check the length of the data buffer:
         short lc_length = apdu.setIncomingAndReceive();
-        //if (lc_length < (byte) AUTH1_INC_LEN) {
-        //    ISOException.throwIt((short) (SW_WRONG_LENGTH | AUTH1_INC_LEN));
-        //}
+        if (lc_length < (byte) AUTH1_INC_LEN) {
+            ISOException.throwIt((short) (SW_WRONG_LENGTH | AUTH1_INC_LEN));
+        }
 
         buffer = apdu.getBuffer();
+
+        // First verify the signature over the message: TODO: fix offsets and lengths
+        termVerifInit(buffer[OFFSET_P1]);
+        signature.update(buffer, OFFSET_P1, (short) 2);
+        if (!signature.verify(buffer, (short) 5, (short) 37, buffer, SK_EXCH_SIG1_OFFSET, SIGN_LENGTH)) {
+            System.out.println("Signature invalid");
+            select(); // reset
+            ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
+        }
+
+        // Copy data to tInfo (more reliable than read info)
+        tInfo[(short) 0] = buffer[OFFSET_P1];
+        tInfo[(short) 1] = buffer[OFFSET_P2];
         Util.arrayCopyNonAtomic(buffer, (short) 5, tInfo, (short) 2, (short) 4); 
 
-        // Verify the signature over the message TODO: fix offsets and lengths
-        Util.arrayCopyNonAtomic(tInfo, (short) 0, sigBuffer, (short) 0, (short) 6);
-        Util.arrayCopyNonAtomic(buffer, SK_EXCH_PUBLIC_OFFSET, sigBuffer, (short) 6, (short) AES_KEY_LENGTH);
-        //termVerif(sigBuffer, (short) 0, (short) ((short) 6 + AES_KEY_LENGTH), buffer, SK_EXCH_SIG1_OFFSET); TODO: reenable this; NOTE: keys may not be available during personalisation
-        
         // Generate our part of the session key.
         keyExchangeKP.genKeyPair();
         ECExch.init(keyExchangeKP.getPrivate());
-        ECExch.generateSecret(buffer, (short) 9, (short) 33, keyExchBuffer, (short) 0);
+        ECExch.generateSecret(buffer, (short) SK_EXCH_PUBLIC_OFFSET, (short) 33, keyExchBuffer, (short) 0);
         
         // Convert keyExchBuffer to skey
         skey.setKey(keyExchBuffer, (short) 0);
@@ -556,31 +563,35 @@ public void process(APDU apdu) throws ISOException, APDUException {
          *  skeyC (33 bytes)
          *
          *  encrypted:
-         *      cardID (4 bytes) // padding to get to multiple of 64 bits aes block length
+         *      cardID (4 bytes) // Added as padding to finish the AES block
          *      nonceC (8 bytes) (nonce used as counter)
-         *      CCert (16 bytes)
+         *      CCert (56 bytes)
          *      CCertExp (4 bytes)
-         *      card message signature (16 bytes)
+         *      card message signature (56 bytes)
          */
         apdu.setOutgoing();
         apdu.setOutgoingLength(AUTH1_RESP_LEN);
 
         ((ECPublicKey) keyExchangeKP.getPublic()).getW(buffer, (short) 0); // first copy the public key exchange part
         
-        // Prepare the encryption buffer TODO: check offsets
+        // generate fresh random nonceC
+        // TODO: seed is the same for each reinstantiation of the card: explain in report why this is, or is not a problem.
+        random.generateData(nonceC, (short) 0, (short) 8);
+        System.out.print("Fresh random card nonce: ");
+        for (byte b : nonceC) System.out.printf("%x ", b);
+        System.out.println();
+
+        // Prepare the encryption buffer
         Util.arrayCopyNonAtomic(cID, (short) 0, buffer, (short) 33, (short) 4); // card ID
         Util.arrayCopyNonAtomic(nonceC, (short) 0, buffer, (short) 37, NONCE_LENGTH);
-        Util.arrayCopyNonAtomic(CCert, (short) 0, buffer, (short) 49, SIGN_LENGTH);
-        Util.arrayCopyNonAtomic(CCertExp, (short) 0, buffer, (short) 65, DATE_LENGTH);
+        Util.arrayCopyNonAtomic(CCert, (short) 0, buffer, (short) 45, SIGN_LENGTH);
+        Util.arrayCopyNonAtomic(CCertExp, (short) 0, buffer, (short) 101, DATE_LENGTH);
 
-        // only try this if prkc is initialised (authenticate may be called before personalisation phase
-        if (prkc.isInitialized()) {
-            signature.init(prkc, Signature.MODE_SIGN);
-            System.out.printf("%d\n", signature.sign(buffer, (short) 0, (short) 52, buffer, (short) 52)); // signature into buffer
-        }
+        signature.init(prkc, Signature.MODE_SIGN);
+        signature.sign(buffer, (short) 0, (short) 105, buffer, (short) 105); // signature into buffer
 
         AESCipher.init(skey, Cipher.MODE_ENCRYPT);
-        AESCipher.doFinal(buffer, (short) 33, (short) 48, buffer, (short) 33); // encrypt in 4 blocks
+        AESCipher.doFinal(buffer, (short) 33, (short) 128, buffer, (short) 33);
 
         status[(short) 0] = (byte) 0x0f;
         apdu.sendBytes((short) 0, AUTH1_RESP_LEN);
@@ -599,9 +610,9 @@ public void process(APDU apdu) throws ISOException, APDUException {
          *          4 bytes terminal ID // padding to get to multiple of 64 bits, aes block length
          *          nonceT  (8 bytes) (nonce used as counter)
          *          nonceC' (8 bytes) (nonce used as counter)
-         *          TCert  (16 bytes)
+         *          TCert  (56 bytes)
          *          TCertExp (4 bytes)
-         *          terminal message signature (16 bytes) (over all plaintext data, incl. P1 and P2
+         *          terminal message signature (56 bytes) (over all plaintext data, incl. P1 and P2)
          *      
          */
 
@@ -708,7 +719,7 @@ public void process(APDU apdu) throws ISOException, APDUException {
         puks.setW(buffer, PUKS_PERS_OFFSET, EC_PUB_KEY_LENGTH);
         
         // get CCert and its information
-        Util.arrayCopy(buffer, CCERT_PERS_OFFSET, CCert, (short) 0, EC_CERT_LENGTH);
+        Util.arrayCopy(buffer, CCERT_PERS_OFFSET, CCert, (short) 0, SIGN_LENGTH);
         Util.arrayCopy(buffer, CCERT_EXP_PERS_OFFSET, CCertExp, (short) 0, DATE_LENGTH);
         Util.arrayCopy(buffer, CID_PERS_OFFSET, cID, (short) 0, ID_LENGTH);
 
@@ -804,7 +815,7 @@ public void process(APDU apdu) throws ISOException, APDUException {
 		 *      2 bytes of transaction number
 		 *		56 bytes of signature of the data
 		 */
-		short lc_length = apdu.setIncomingAndReceive();
+	/*	short lc_length = apdu.setIncomingAndReceive();
         if (lc_length < (byte) CHAR2_INC_LEN) {
             ISOException.throwIt((short) (SW_WRONG_LENGTH | CHAR2_INC_LEN));
         }
@@ -817,7 +828,7 @@ public void process(APDU apdu) throws ISOException, APDUException {
 
 
 		signature.init(skey, Signature.MODE_VERIFY);
-		if(!signature.verify(sigBuff, (short) 0, (short) 16, buffer, (short) 16, SIGN_LENGTH)) {
+		if(!signature.verify(sigBuffer, (short) 0, (short) 16, buffer, (short) 16, SIGN_LENGTH)) {
 			ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
 
 
@@ -835,7 +846,7 @@ public void process(APDU apdu) throws ISOException, APDUException {
 		Util.arrayCopy(TCert, (short) 0, sigBuffer, (short) 4, (short) SIGN_LENGTH);
 		sigBuffer[(short) 20] = (byte) (petrolCredits & 0xff);
 		sigBuffer[(short) 21] = (byte) ((petrolCredits >> 8) & 0xff);
-		(short) tNum = (short) (tNum + 1);
+		short tNum = (short) (tNum + 1);
 		sigBuffer[(short) 22] = (byte) (tNum & 0xff);
 		sigBuffer[(short) 23] = (byte) ((tNum >> 8) & 0xff);
 
@@ -847,6 +858,7 @@ public void process(APDU apdu) throws ISOException, APDUException {
 
 		apdu.setOutgoingAndSend((short) 0, (short) CHAR2_RESP_LEN);
 		status[(short) 0] = (byte) (status[(short) 0] - 0x10);
+        */
 	}
 
 	private void consume(APDU apdu, byte[] buffer) {

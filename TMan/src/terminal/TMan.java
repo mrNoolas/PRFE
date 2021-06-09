@@ -117,6 +117,12 @@ public class TMan extends JPanel implements ActionListener {
     private Signature signature;
     private RandomData random;
 
+    // Session data:
+    private byte[] cardID;
+    private byte cardSoftVers;
+    private boolean cardAuthenticated = false;
+    private byte cardType;
+    private int petrolQuota;
     private byte[] nonceC;
     private byte[] nonceT;
 
@@ -136,13 +142,6 @@ public class TMan extends JPanel implements ActionListener {
         signature = Signature.getInstance(Signature.ALG_ECDSA_SHA, false);
         random = RandomData.getInstance(RandomData.ALG_SECURE_RANDOM);
 
-        /*xy = JCSystem.makeTransientShortArray((short) 2, JCSystem.CLEAR_ON_RESET);
-        lastOp = JCSystem.makeTransientByteArray((short) 1, JCSystem.CLEAR_ON_RESET);
-        lastKeyWasDigit = JCSystem.makeTransientBooleanArray((short) 1, JCSystem.CLEAR_ON_RESET);
-        m = 0;*/
-        //register();
-
-        // original code: ===========================================================================
         //simulatorInterface = new JavaxSmartCardInterface(); // SIM
         buildGUI(parent);
         setEnabled(false);
@@ -160,10 +159,10 @@ public class TMan extends JPanel implements ActionListener {
         display.setForeground(Color.green);
         add(display, BorderLayout.NORTH);
         keypad = new JPanel(new GridLayout(5, 5));
-        key("Personalise");
         key("Read");
+        key("Personalise");
         key("Authenticate");
-        key(null);
+        key("Quit");
         key("C");
         key("7");
         key("8");
@@ -234,6 +233,17 @@ public class TMan extends JPanel implements ActionListener {
         }
     }
 
+    private void resetTerminal(){
+        cardID = new byte[] {0,0,0,0};
+        cardSoftVers = 0;
+        cardAuthenticated = false;
+        cardType = 0;
+        petrolQuota = 0;
+        
+        nonceC = new byte[] {0,0,0,0, 0,0,0,0};
+        nonceT = new byte[] {0,0,0,0, 0,0,0,0};
+    }
+
     public void setEnabled(boolean b) {
         super.setEnabled(b);
         if (b) {
@@ -294,6 +304,9 @@ public class TMan extends JPanel implements ActionListener {
                     case 'P':
                         setText(personalise());
                         break;
+                    case 'Q':
+                        System.exit(0);
+                        break;
                     default:
                         setText(sendKey((byte) c));
                         break;
@@ -312,6 +325,8 @@ public class TMan extends JPanel implements ActionListener {
     }
     
     public int readCard() {                                                 //default method, read information on card
+        resetTerminal();
+
         //construct a commandAPDU with the INS byte for read and the terminal info
         CommandAPDU readCommand = new CommandAPDU(PRFE_CLA, READ_INS, T_TYPE, T_SOFT_VERSION, T_ID, 0, ID_LENGTH, 8);
 
@@ -337,13 +352,11 @@ public class TMan extends JPanel implements ActionListener {
          */
         byte[] data = response.getData(); 
 
-        byte cardType = data[0];
-        byte cardSoftVers = data[1];
+        cardType = data[0];
+        cardSoftVers = data[1];
 
-        byte[] cardID = new byte[4];
         System.arraycopy(data, 2, cardID, 0, 4);
-
-        short petrolQuota = Util.getShort(data, (short) 6);
+        petrolQuota = (int) Util.getShort(data, (short) 6);
 
         System.out.printf("Read response from Card: Type: %x; Soft Vers: %x; ID: %x%x%x%x; Petrolquota: %x \n", 
                 cardType, cardSoftVers, cardID[0], cardID[1], cardID[2], cardID[3], petrolQuota);
@@ -352,14 +365,20 @@ public class TMan extends JPanel implements ActionListener {
 
     public String authenticate() {
         // First initialise the session key
-        byte[] buffer = new byte[37];
+        resetTerminal();
+        byte[] buffer = new byte[93];
         keyExchangeKP.genKeyPair();
 
         System.arraycopy(T_ID, 0, buffer, 0, 4);
         ((ECPublicKey) keyExchangeKP.getPublic()).getW(buffer, (short) 4);
 
+        // produce signature and add that to the buffer
+        signature.init(TMan.getPrivate(), Signature.MODE_SIGN);
+        signature.update(new byte[] {T_TYPE, T_SOFT_VERSION}, (short) 0, (short) 2);
+        signature.sign(buffer, (short) 0, (short) 37, buffer, (short) 37);
+
         //construct a commandAPDU with the INS byte for read and the terminal info
-        CommandAPDU command = new CommandAPDU(PRFE_CLA, AUTH_INS, T_TYPE, T_SOFT_VERSION, buffer, 0, 37, 80);
+        CommandAPDU command = new CommandAPDU(PRFE_CLA, AUTH_INS, T_TYPE, T_SOFT_VERSION, buffer, 0, 93, 161);
 
         ResponseAPDU response;
         try {
@@ -381,9 +400,9 @@ public class TMan extends JPanel implements ActionListener {
          *encrypted:
          *  4 bytes card ID
          *  8 bytes nonceC
-         *  16 bytes CCert
+         *  56 bytes CCert
          *  4 bytes CCertExp
-         *  16 bytes card message signature
+         *  56 bytes card message signature
          */
         
         byte[] data = response.getData(); 
@@ -392,22 +411,40 @@ public class TMan extends JPanel implements ActionListener {
         ECExch.generateSecret(data, (short) 0, (short) 33, keyExchBuffer, (short) 0);
 
         skey.setKey(keyExchBuffer, (short) 0);
+
+        // First decrypt the buffer
+        AESCipher.init(skey, Cipher.MODE_DECRYPT);
+        AESCipher.doFinal(data, (short) 33, (short) 128, data, (short) 33); 
+
+        // Then verify the message signature
+        signature.init(Card.getPublic(), Signature.MODE_VERIFY);
+
+        if (!signature.verify(data, (short) 0, (short) 105, data, (short) 105, (short) 56)) {
+            return "Auth failed, return sig invalid";
+        }
+
+        // Then verify CCert
+        // TODO: check that the CCert expiry date is in the future...
+        signature.init(Server.getPublic(), Signature.MODE_VERIFY);
+        byte[] CCert = new byte[9];
+        System.arraycopy(data, 33, CCert, 0, 4);
+        CCert[4] = (byte) 0;
+        System.arraycopy(data, 101, CCert, 5, 4);
+
+        if (!signature.verify(CCert, (short) 0, (short) 9, data, (short) 45, (short) 56)) {
+            return "Auth failed, CCert invalid";
+        }
+
+        // Finally store verified data of the card
+        System.arraycopy(data, 33, cardID, 0, 4);
+        cardAuthenticated = true;
         
-        // TODO: continue from here
+        // ================== Authentication Phase 2
+        // Move forward with authenticating Terminal to card
 
-/*
-        byte cardType = data[0];
-        byte cardSoftVers = data[1];
 
-        byte[] cardID = new byte[4];
-        Util.arrayCopy(data, (short) 2, cardID, (short) 0, (short) 4);
-
-        short petrolQuota = Util.getShort(data, (short) 6);
-
-        System.out.printf("Read response from Card: Type: %x; Soft Vers: %x; ID: %x%x%x%x; Petrolquota: %x \n", 
-                cardType, cardSoftVers, cardID[0], cardID[1], cardID[2], cardID[3], petrolQuota);
-                */
-        return "blahblahplaceholder";
+        
+        return "Authentication Successful";
 
     }
 
@@ -439,7 +476,7 @@ public class TMan extends JPanel implements ActionListener {
         ((ECPublicKey) ReCard.getPublic()).getW(buffer1, (short) 0);
         ((ECPublicKey) Server.getPublic()).getW(buffer1, (short) 51);
 
-        // generate cardID
+        // generate cardID // TODO: put in the report that we now use a fixed cardID for easier testing, but that this could just as well be dynamic
         byte[] cardID = new byte[] {(byte) 0xde, (byte) 0xad, (byte) 0xbe, (byte) 0xef};
 
         // generate CCert
