@@ -73,11 +73,13 @@ public class TCons extends JPanel implements ActionListener {
     private AESKey skey;                  // Session key
 
     //length constants
-		private static final short ID_LENGTH = 4;
-		private static final short NONCE_LENGTH = 8;
+    private static final short ID_LENGTH = 4;
+    private static final short NONCE_LENGTH = 8;
     private static final short TID_LENGTH     = 4;
     private static final short NONCET_LENGTH  = 8;
     private static final short AES_KEY_LENGTH = 16;
+
+    private static final short SIGN_LENGTH = 56;
 
 
     private KeyAgreement ECExch;
@@ -260,7 +262,7 @@ public class TCons extends JPanel implements ActionListener {
          */
     //}
 
-    /*public byte[] generateNonce(){
+    public byte[] generateNonce(){
         //generate a 32 bit random nonce
         byte[] nonce = new byte[NONCET_LENGTH];
         return random.nextBytes(nonce);
@@ -270,8 +272,11 @@ public class TCons extends JPanel implements ActionListener {
         //TODO: implement method to update the quota on the card
         //send sequence number to card to start the consumption transaction
         byte[] nonceT = generateNonce();
-        byte[] encryptedData = encryptAES(nonceT, skey);
-        CommandAPDU consumeCommand = new CommandAPDU(PRFE_CLA, CONS_INS, T_TYPE, T_SOFT_VERSION, encryptedData);
+        byte[] sigBuffer = new byte[2*SIGN_LENGTH];
+
+        signature.init(skey, Signature.MODE_SIGN);
+        signature.sign(nonceT, (short) 0, (short) 8, sigBuffer, (short) 0);
+        CommandAPDU consumeCommand = new CommandAPDU(PRFE_CLA, CONS_INS, T_TYPE, T_SOFT_VERSION, sigBuffer);
 
         ResponseAPDU response;
         try {
@@ -286,33 +291,104 @@ public class TCons extends JPanel implements ActionListener {
         //verify response
         byte[] data = response.getData();
         //data = card-id, quota, signedData
-        ByteBuffer cardData = ByteBuffer.wrap(data);
         byte[] cardID = new byte[4];
-        cardData.get(cardID, 0, 4);
-        short petrolQuotaOnCard = cardData.getShort(4);
+        Util.arrayCopy(data, 0, 4, cardID, 0, 4);
+        short petrolQuotaOnCard = Util.getShort(data, (short) 4);
+        byte[] nonceC = incNonce(nonceT); //sequence nr + 1
 
+        System.arrayCopy(cardID, 0, sigBuffer, 0, 4);
+        Util.setShort(sigBuffer, (short) 4, petrolQuotaOnCard);
+        System.arrayCopy(nonceC, 0, sigBuffer, 6, NONCET_LENGTH);
 
+        signature.init(skey, Signature.MODE_VERIFY);
+        if (!signature.verify(sigBuffer, 0, 14, data, 6, SIGN_LENGTH)) {
+            throw new Exception("Signature invalid");
+
+        }
+
+        short amount = 0;
         //amount = entered by the buyer
+        //TODO: read input and put this value into short amount
         //card has quota balance
-        if (balance - amount < 0){
-            return 0;
+        if (petrolQuotaOnCard - amount < 0){
+            throw new Exception("Invalid amount");
         }
         //if quota on card - amount < 0 : exit
-        //else
+        short wantedPetrol = petrolQuotaOnCard - (short) amount;
+        nonceT = incNonce(nonceC); //sequence nr + 2
+        byte[] dataBuffer = new byte[14]
+        System.arrayCopy(cardID, 0, dataBuffer, 0, 4);
+        Util.setShort(dataBuffer, 4, wantedPetrol);
+        System.arrayCopy(nonceT, 0, dataBuffer, 6, NONCET_LENGTH);
+        signature.init(skey, Signature.MODE_SIGN);
+        signature.update(dataBuffer);
+        byte[] signedData = signature.sign();
+        System.arrayCopy(signedData, 0, sigBuffer, 6, SIGN_LENGTH);
+        CommandAPDU cons2Command = new CommandAPDU((int) PRFE_CLA, (int) CHAR_INS, (int) TERMINAL_TYPE, (int)TERMINAL_SOFTWARE_VERSION, sigBuffer);
+
+        try {
+            ResponseAPDU response = applet.transmit(cons2Command);
+        } catch (CardException e) {
+            System.out.println(e);
+            return 0;
+        }
+        nonceC = incNonce(nonceT); //sequence nr + 3
+        nonceT = incNonce(nonceC); //sequence nr + 4
+        byte[] responseData = response.getData();
+        if(responseData[0] == (byte) 1){
+            setMaxGas(wantedPetrol);
+            if(getGasUsed() < wantedPetrol){
+
+                short updatedQuota = wantedPetrol - getGasUsed();
+
+                System.arrayCopy(cardID, 0, dataBuffer, 0, 4);
+                Util.setShort(dataBuffer, 4,  updatedQuota);
+                System.arrayCopy(nonceT, 0, dataBuffer, 6, NONCET_LENGTH);
+
+                signature.init(skey, Signature.MODE_SIGN);
+                signature.update(dataBuffer);
+                signedData = signature.sign();
+
+                System.arrayCopy(cardID, 0, sigBuffer, 0, 4);
+                Util.setShort(sigBuffer, 4, updatedQuota);
+                System.arrayCopy(signedData, 0, sigBuffer, 6, SIGN_LENGTH);
+
+                CommandAPDU cons3Command = new CommandAPDU((int) PRFE_CLA, (int) CHAR_INS, (int) TERMINAL_TYPE, (int)TERMINAL_SOFTWARE_VERSION, sigBuffer);
+
+                try {
+                    ResponseAPDU response = applet.transmit(cons3Command);
+                } catch (CardException e) {
+                    System.out.println(e);
+                    return 0;
+                }
+            }
+        }
 
     };
 
+    private void incNonce (byte[] nonce) {
+        for (short i = (short) 7; i >= (short) 0; i--) {
+            if (nonce[i] == 0xff) {
+                nonce[i] = (byte) 0x00;
+                // Continue looping to process carry
+            } else {
+                nonce[i] = (byte) (((short) (nonce[i] & 0xff) + 1) & 0xff); // increment byte with 1, unsigned
+                break; // no carry so quit
+            }
+        }
+        // Any remaining carry is just ignored.
+    }
 
-    void setMaxGas(){
-        //TODO: implement method to set maximum value for gas consumption
-        //read balance from the card
-        int balance = getPetrolCredit();
-        //
-        //
+    void setMaxGas(short wantedPetrol){
+        return;
     };                                                                             //set the max amount of gas available to the buyer based on the quota on card (a short?)
 
-    short getGasUsed(){
+    short getGasUsed(short maxGas, short amount){
         //TODO: implement method to update amount of gas used by buyer
+        for(i = 0, i < maxGas, i++){
+
+        }
+
     };                                                                                          //return the amount of gas dispensed
 
 
@@ -362,7 +438,7 @@ public class TCons extends JPanel implements ActionListener {
         cipher.init(Cipher.DECRYPT_MODE, key);
         byte[] decryptedMessage = cipher.doFinal(encryptedMessage);
         return decryptedMessage;
-    }*/
+    }
 
 
     //original terminal code starts here
