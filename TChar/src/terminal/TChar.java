@@ -5,6 +5,7 @@ import javacard.framework.ISO7816;
 import javacard.framework.*;
 import javacard.security.*;
 import javacardx.crypto.*;
+import javax.crypto.*;
 
 import java.awt.BorderLayout;
 import java.awt.Color;
@@ -38,7 +39,6 @@ import javax.swing.JTextField;
 //import com.licel.jcardsim.io.JavaxSmartCardInterface;
 //import com.licel.jcardsim.smartcardio.JCardSimProvider;
 
-import javax.crypto.*;
 
 import com.licel.jcardsim.smartcardio.CardTerminalSimulator;
 import com.licel.jcardsim.smartcardio.CardSimulator;
@@ -70,9 +70,9 @@ public class TChar extends JPanel implements ActionListener {
 	private ECPublicKey purkTChar; // public rekey key TChar
 	private ECPublicKey puks; // certificate verification key
 
-	private AESKey skey; 
+	private AESKey skey;
 	private Signature signature;
-	private Cipher AESCipher;
+	private javacardx.crypto.Cipher AESCipher;
 
 	private byte[] TCert; // Terminal certificate
 
@@ -140,9 +140,9 @@ public class TChar extends JPanel implements ActionListener {
 		puks      = (ECPublicKey)  KeyBuilder.buildKey(KeyBuilder.TYPE_EC_F2M_PUBLIC,  KeyBuilder.LENGTH_EC_F2M_193, true);
 		TCert     = null;
 
-		
+
 		signature = Signature.getInstance(Signature.ALG_ECDSA_SHA, false);
-		AESCipher = Cipher.getInstance(Cipher.ALG_AES_BLOCK_128_CBC_NOPAD, false);
+		AESCipher = javacardx.crypto.Cipher.getInstance(javacardx.crypto.Cipher.ALG_AES_BLOCK_128_CBC_NOPAD, false);
 
 		tID = new byte[TID_LENGTH];
 		nonceT = new byte[NONCET_LENGTH];
@@ -199,18 +199,18 @@ public class TChar extends JPanel implements ActionListener {
 		// Terminal declines PIN: user is not authenticated
 	}
 
-	
+
 	public void charge(CardApplet card) {
 		byte[] sigBuffer = new byte[2*SIGN_LENGTH];
 
 		signature.init(skey, Signature.MODE_SIGN);
 		signature.sign(nonceT, (short) 0, (short) 8, sigBuffer, (short) 0);
 		CommandAPDU chargeCommand = new CommandAPDU((int) PRFE_CLA, (int) CHAR_INS, (int)TERMINAL_TYPE, (int)TERMINAL_SOFTWARE_VERSION, sigBuffer);
+		ResponseAPDU response;
 		try {
-			ResponseAPDU response = applet.transmit(chargeCommand);
+			response = applet.transmit(chargeCommand);
 		} catch (CardException e) {
 			System.out.println(e);
-			return 0;
 		}
 
 		byte[] data = response.getData();
@@ -220,13 +220,13 @@ public class TChar extends JPanel implements ActionListener {
 		short petrolQuota = Util.getShort(data, (short) 4);
 
 		short tNum = Util.getShort(data, (short) 6);
-		
-		System.arrayCopy(data, 0, sigBuffer, 0, 8);
+
+		System.arraycopy(data, 0, sigBuffer, 0, 8);
 		incNonce(nonceT);
-		System.arrayCopy(nonceT, 0, sigBuffer, 8, NONCET_LENGTH);
-		
+		System.arraycopy(nonceT, 0, sigBuffer, 8, NONCET_LENGTH);
+
 		signature.init(skey, Signature.MODE_VERIFY);
-		if (!signature.verify(sigBuffer, 0, 16, data, 8, SIGN_LENGTH)) {
+		if (!signature.verify(sigBuffer, (short) 0, (short) 16, data, (short) 8, SIGN_LENGTH)) {
 			throw new Exception("Signature invalid");
 
 		}
@@ -234,41 +234,40 @@ public class TChar extends JPanel implements ActionListener {
 		short extraQuota = getMonthlyQuota(cardID);
 		data[4] = (byte) (extraQuota & 0xff);
 		data[5] = (byte) ((extraQuota >> 8) & 0xff);
-		
+
 		data[6] = (byte) (tNum & 0xff);
 		data[7] = (byte) ((tNum >> 8) & 0xff);
 		incNonce(nonceT);
 
-		System.arrayCopy(nonceT, 0, data, 8, NONCET_LENGTH);
-		
+		System.arraycopy(nonceT, 0, data, 8, NONCET_LENGTH);
+
 
 		signature.init(skey, Signature.MODE_SIGN);
-		signature.sign(data, 0, 16, data, 8);
+		signature.sign(data, (short) 0, (short) 16, data, (short) 8);
 		CommandAPDU chargeCommand = new CommandAPDU((int) PRFE_CLA, (int) CHAR_INS, (int) TERMINAL_TYPE, (int)TERMINAL_SOFTWARE_VERSION, data);
 		try {
-			ResponseAPDU response = applet.transmit(chargeCommand);
+			response = applet.transmit(chargeCommand);
 		} catch (CardException e) {
 			System.out.println(e);
-			return 0;
 		}
 
-		
+
 		data = response.getData();
-		System.arrayCopy(cID, 0, sigBuffer, 0, 4);
-		System.arrayCopy(TCert, 0, sigBuffer, 4, SIGN_LENGTH);
+		System.arraycopy(cID, 0, sigBuffer, 0, 4);
+		System.arraycopy(TCert, 0, sigBuffer, 4, SIGN_LENGTH);
 		petrolQuota += extraQuota;
-		sigBuffer[60] = (petrolQuota & 0xff);
-		sigBuffer[61] = ((petrolQuota >> 8) & 0xff);
-		sigBuffer[62] = (tNum & 0xff);
-		sigBuffer[63] = ((tNum >> 8) & 0xff);
-		
+		sigBuffer[60] = (byte) (petrolQuota & 0xff);
+		sigBuffer[61] = (byte) ((petrolQuota >> 8) & 0xff);
+		sigBuffer[62] = (byte) (tNum & 0xff);
+		sigBuffer[63] = (byte) ((tNum >> 8) & 0xff);
+
 		signature.init(skey, Signature.MODE_VERIFY);
-		if (!signature.verify(sigBuffer, 0, 64, data, 0, SIGN_LENGTH)) {
+		if (!signature.verify(sigBuffer, (short) 0, (short) 64, data, (short) 0, SIGN_LENGTH)) {
 			throw new Exception("Signature invalid");
 		}
-		
+
 		incNonce(nonceT);
-		if (!signature.verify(nonceT, 0, 8, data, SIGN_LENGTH, SIGN_LENGTH)) {
+		if (!signature.verify(nonceT, (short) 0, (short) 8, data, SIGN_LENGTH, SIGN_LENGTH)) {
 			throw new Exception("Signature invalid");
 		}
 
@@ -280,11 +279,15 @@ public class TChar extends JPanel implements ActionListener {
 
 	public byte[] hash(byte[] data) {
 		// Hash the message using hash function
-		MessageDigest md = MessageDigest.getInstance("");
-		md.update(data);
+		try {
+			MessageDigest md = MessageDigest.getInstance(MessageDigest.ALG_SHA, false);
+			md.update(data, (short) 0, (short) data.length);
 
-		byte[] hash = md.digest();
-		return hash;
+			byte[] hash = md.digest();
+			return hash;
+		} catch (CryptoException e) {
+			System.out.println(e);
+		}
 	}
 
 	public boolean verify(byte[] data, byte[] key) {
@@ -320,9 +323,9 @@ public class TChar extends JPanel implements ActionListener {
 
 
 		short petrolCredit = data[(short) 0];
-		petrolCredit = (short) petrolCredit + (short) monthlyQuota;
+		petrolCredit = (short) (petrolCredit + monthlyQuota);
 		CommandAPDU chargeCommand = new CommandAPDU((int)PRFE_CLA, (int) CHAR_INS, (short) monthlyQuota, (int) 0);
-		ResponseAPDU response = applet.transmit(chargeCommand);
+		response = applet.transmit(chargeCommand);
 
 
 
@@ -348,7 +351,7 @@ public class TChar extends JPanel implements ActionListener {
         }
         // Any remaining carry is just ignored.
     }
-*/
+
 		void buildGUI(JFrame parent) {
 				setLayout(new BorderLayout());
 				display = new JTextField(DISPLAY_WIDTH);
