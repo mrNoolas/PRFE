@@ -437,12 +437,12 @@ public class TMan extends JPanel implements ActionListener {
 
         // Finally store verified data of the card
         System.arraycopy(data, 33, cardID, 0, 4);
+        System.arraycopy(data, 37, nonceC, 0, 8);
         cardAuthenticated = true;
         
         // ================== Authentication Phase 2
         // Move forward with authenticating Terminal to card
-
-
+        buffer = new byte[136];
         
         return "Authentication Successful";
 

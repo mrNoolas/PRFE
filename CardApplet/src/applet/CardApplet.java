@@ -116,10 +116,11 @@ private byte[] keyExchBuffer;
 private byte[] sigBuffer;
 
 private short petrolCredits;
+private short incomingPetrolQuota;
 
 private Object[] transactionLog;
 private byte[] lastKnownTime;
-private short tNum;
+private short tNum = 0;
 
 // Keeps track of authentication and card state
 // 0x00 unitialised
@@ -127,16 +128,16 @@ private short tNum;
 // 0x02 terminal authenticated as TChar
 // 0x03 terminal authenticated as TCons
 // 0x04 card has been revoked
-// 0x1. card is in a charging operation 
+// 0x1. card is in a charging operation
 // 0x0f authentication initiated, session key exchanged
 // User authentication is handled by the PIN class
-private byte[] status; 
+private byte[] status;
 
 
 public CardApplet() {
     pin = new OwnerPIN(PIN_TRY_LIMIT, PIN_SIZE);
 
-    status = JCSystem.makeTransientByteArray((short) 1, JCSystem.CLEAR_ON_RESET);  
+    status = JCSystem.makeTransientByteArray((short) 1, JCSystem.CLEAR_ON_RESET);
     keyExchBuffer = JCSystem.makeTransientByteArray((short) 20, JCSystem.CLEAR_ON_RESET);
     sigBuffer = JCSystem.makeTransientByteArray((short) 30, JCSystem.CLEAR_ON_RESET);
     nonceC = JCSystem.makeTransientByteArray((short) NONCE_LENGTH, JCSystem.CLEAR_ON_RESET);
@@ -167,7 +168,7 @@ public CardApplet() {
 
     cID = new byte[4];
     tInfo = JCSystem.makeTransientByteArray((short) 6, JCSystem.CLEAR_ON_RESET);
-    
+
     select(); // Reset status and tInfo
 
     petrolCredits = (short) 1;
@@ -200,11 +201,11 @@ public void process(APDU apdu) throws ISOException, APDUException {
     if (buffer[OFFSET_CLA] != PRFE_CLA) ISOException.throwIt(SW_CLA_NOT_SUPPORTED);
 
     switch (ins & 0xff) {
-    case 0x00: 
+    case 0x00:
         /*
          * READ instruction:
          * INS: 0x00
-         * P1: Terminal Type 
+         * P1: Terminal Type
          * P2: Terminal Software Version
          * Lc: should be READ_INC_LEN
          * Data: 32 bits of Terminal ID (READ_INC_LEN bytes)
@@ -218,14 +219,14 @@ public void process(APDU apdu) throws ISOException, APDUException {
         if (lc_length < (byte) READ_INC_LEN) {
             ISOException.throwIt((short) (SW_WRONG_LENGTH | READ_INC_LEN));
         }
-        
+
         buffer = apdu.getBuffer();
-        Util.arrayCopyNonAtomic(buffer, (short) 0, tInfo, (short) 2, (short) READ_INC_LEN); 
+        Util.arrayCopyNonAtomic(buffer, (short) 0, tInfo, (short) 2, (short) READ_INC_LEN);
 
         read(apdu, buffer);
         break;
     case 0x10:
-        if (!checkAndCopyTypeAndVersion(buffer)) { 
+        if (!checkAndCopyTypeAndVersion(buffer)) {
             // reset status:
             select();
 
@@ -277,32 +278,32 @@ public void process(APDU apdu) throws ISOException, APDUException {
 
     case 0x40:
         /* REVOKE instruction:
-		 * 
+		 *
 		 * This instruction can be executed at any authenticated terminal.
 		 *
-		 * INS: 0x40 
+		 * INS: 0x40
 		 * P1: Terminal Type
-		 * P2: Terminal Software Version 
+		 * P2: Terminal Software Version
 		 * Lc: should be REVOKE_INC_LENGTH
 		 * Data: Signature over the revoke operation
 		 *
-		
+
 		if (!checkAndCopyTypeAndVersion(buffer)) ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
-		
+
 		lc_length = apdu.setIncomingAndReceive();
         if (lc_length < (byte) REVOKE_LENGTH) {
             ISOException.throwIt((short) (SW_WRONG_LENGTH | REVOKE_INC_LENGTH));
         }
-		
+
 		buffer = apdu.getBuffer();
-		
+
 		if (((status[(short) 0] & 0xff) == 0x01) || ((status[(short) 0] & 0xff) == 0x02) || ((status[(short) 0] & 0xff) == 0x03) ) {
 			tInfo[(short) 1] = buffer[OFFSET_P1];
 			Util.arrayCopyNonAtomic(buffer, OFFSET_INS, sigBuffer, (short) 0, (short) 1); // Instruction byte
 			Util.arrayCopyNonAtomic(cID, (short) 0, sigBuffer, (short) 1, (short) 4); // Card ID
 			Util.arrayCopyNonAtomic(buffer, SIGN_LENGTH, sigBuffer, (short) 5, NONCE_LENGTH); // Nonce
-			
-			
+
+
 			if (!verify(sigBuffer,(short) 0,(short) 13 ,buffer, (short) 0, SIGN_LENGTH)) {
 				ISOException.throwIt(SW_WRONG_DATA);
 			}
@@ -310,21 +311,21 @@ public void process(APDU apdu) throws ISOException, APDUException {
 				revoke(apdu, buffer);
 			}
 		} */
-		
+
         break;
     case 0x50:
         /*
          * PERSONALISE instruction:
          *
          * Only allowed if manageable is still True.
-         * 
+         *
          * Note: every EC public key is 51 bytes; private key 24 bytes; and every AES key is 16 bytes.
          *
          * TODO: Send MAC? --> Assume TMan is in a secure environment so encryption not necessary?
          *
          * INS: 0x50
          * P1: 0b00000bba : a) Disable Personalisation after update; b) 00: first personalisation instruction; 01: second personalisation instruction; 10: only set manageable;
-         * P2: Terminal Software Version 
+         * P2: Terminal Software Version
          * Lc: PERS_INC_LEN (bytes)
          * Data: (bb = 00)
          *      51 bytes pukTMan
@@ -383,7 +384,7 @@ public void process(APDU apdu) throws ISOException, APDUException {
         apdu.sendBytes((short) 0, (short) 5);
         */
     }
-    
+
     /**
      * Extracts the type and buffer values from the buffer.
      * If the values are plausible, it copies them to the tInfo array (information about last known terminal)
@@ -395,10 +396,10 @@ public void process(APDU apdu) throws ISOException, APDUException {
         short s = (short) (status[(short) 0] & 0xff);
 
         // Terminal type should stay the same as before, otherwise the authentication fails.
-        if ((s != (short) 0xff && s > (short) 3) || (s > (short) 0 && tInfo[(short) 0] != type) || !plausible) return false; 
+        if ((s != (short) 0xff && s > (short) 3) || (s > (short) 0 && tInfo[(short) 0] != type) || !plausible) return false;
 
         tInfo[(short) 0] = buffer[OFFSET_P1]; // terminal type
-        tInfo[(short) 1] = buffer[OFFSET_P2]; // terminal software version 
+        tInfo[(short) 1] = buffer[OFFSET_P2]; // terminal software version
         // TODO: The Terminal software version information is not currently used. Should we add this to the documentation?
 
         return true;
@@ -406,13 +407,13 @@ public void process(APDU apdu) throws ISOException, APDUException {
 
     /**
      * Increment nonce with 1
-     */ 
+     */
     private void incNonce (byte[] nonce) {
         for (short i = (short) 7; i >= (short) 0; i--) {
             if (nonce[i] == 0xff) {
                 nonce[i] = (byte) 0x00;
                 // Continue looping to process carry
-            } else { 
+            } else {
                 nonce[i] = (byte) (((short) (nonce[i] & 0xff) + 1) & 0xff); // increment byte with 1, unsigned
                 break; // no carry so quit
             }
@@ -455,9 +456,9 @@ public void process(APDU apdu) throws ISOException, APDUException {
 
 
     private void checkExpDate(byte[] buff, short offset) {
-        // Compare expiration date and the last known valid date: sanity check on dates   
+        // Compare expiration date and the last known valid date: sanity check on dates
         // Check yymd: compare them as unsigned numbers; if any is lower, the expiration date is invalid. Throws data invalid.
-        if ((short) (buff[offset] & 0xff) < (short) (lastKnownTime[(short) 0] & 0xff) 
+        if ((short) (buff[offset] & 0xff) < (short) (lastKnownTime[(short) 0] & 0xff)
                 || (short) (buff[(short) (offset + (short) 1)] & 0xff) < (short) (lastKnownTime[(short) 1] & 0xff)
                 || (short) (buff[(short) (offset + (short) 2)] & 0xff) < (short) (lastKnownTime[(short) 2] & 0xff)
                 || (short) (buff[(short) (offset + (short) 3)] & 0xff) < (short) (lastKnownTime[(short) 3] & 0xff) ) {
@@ -469,21 +470,21 @@ public void process(APDU apdu) throws ISOException, APDUException {
      * Read some general data from the card.
      *
      * Sends card type; card software version; and card ID to the terminal.
-     */ 
+     */
     private void read(APDU apdu, byte[] buffer) {
         // set the data transfer direction to outbound and to obtain the expected length of response
         short expectedLength = apdu.setOutgoing();
-        
+
         if (expectedLength < (short) READ_RESP_LEN) ISOException.throwIt((short) (SW_WRONG_LENGTH | READ_RESP_LEN));
-        
+
         // Return answer with some general data about the card:
         apdu.setOutgoingLength((byte) READ_RESP_LEN);
-        
+
         buffer[(short) 0] = (byte) CARD_TYPE;
-        buffer[(short) 1] = (byte) CARD_SOFTWARE_VERSION; 
+        buffer[(short) 1] = (byte) CARD_SOFTWARE_VERSION;
         Util.arrayCopyNonAtomic(cID, (short) 0, buffer, (short) 2, (short) 4);
         Util.setShort(buffer, (short) 6, petrolCredits);
-        
+
         apdu.sendBytes((short) 0, (short) READ_RESP_LEN);
     }
 
@@ -498,7 +499,7 @@ public void process(APDU apdu) throws ISOException, APDUException {
             case 0x01: // terminal authenticated as TMan
             case 0x02: // terminal authenticated as TChar
             case 0x03: // terminal authenticated as TCons
-               
+
                 // The terminal is already authenticated, so nothing left to do. (reset handles other changes)
                 ISOException.throwIt(SW_WARNING_STATE_UNCHANGED);
                 break;
@@ -515,12 +516,12 @@ public void process(APDU apdu) throws ISOException, APDUException {
      * INS: 0x10
      * P1: Terminal Type
      * P2: Terminal Software version
-     * Lc: 
+     * Lc:
      * Data 2.0:
      *      4 bytes Terminal ID
      *      16 bytes Public key exchange component, skeyT
      *      16 Signature over P1, P2, TID and skeyT with prkT
-     */ 
+     */
 
     private void authenticatePhase1 (APDU apdu, byte[] buffer) {
         // First get and check the length of the data buffer:
@@ -530,7 +531,7 @@ public void process(APDU apdu) throws ISOException, APDUException {
         }
 
         buffer = apdu.getBuffer();
-
+        
         // First verify the signature over the message: TODO: fix offsets and lengths
         termVerifInit(buffer[OFFSET_P1]);
         signature.update(buffer, OFFSET_P1, (short) 2);
@@ -555,9 +556,9 @@ public void process(APDU apdu) throws ISOException, APDUException {
 
         // Generate Card Nonce nonceC
         random.generateData(nonceC, (short) 0, (short) 8);
-        
+
         /*
-         *  Prepare response 
+         *  Prepare response
          *
          *  Contents:
          *  skeyC (33 bytes)
@@ -604,7 +605,7 @@ public void process(APDU apdu) throws ISOException, APDUException {
          * INS: 0x10
          * P1: Terminal Type
          * P2: Terminal Software version
-         * Lc: 
+         * Lc:
          * Data 2.0:
          *      encrypted with skey:
          *          4 bytes terminal ID // padding to get to multiple of 64 bits, aes block length
@@ -632,7 +633,7 @@ public void process(APDU apdu) throws ISOException, APDUException {
             select(); // reset status
             ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
         }
-        
+
         // Verify the signature over the message
         Util.arrayCopyNonAtomic(tInfo, (short) 0, sigBuffer, (short) 0, (short) 6);
         Util.arrayCopyNonAtomic(buffer, (short) 4, sigBuffer, (short) 6, (short) 36);
@@ -647,7 +648,7 @@ public void process(APDU apdu) throws ISOException, APDUException {
         // All checks are done, now get the terminal nonce and verify the terminal certificate
         Util.arrayCopyNonAtomic(buffer, (short) 4, nonceT, (short) 0, NONCE_LENGTH);
 
-        // Compare expiration date and the last known valid date: sanity check on dates   
+        // Compare expiration date and the last known valid date: sanity check on dates
         checkExpDate(buffer, (short) 36);
 
 		// Save TCert for charging operation
@@ -656,10 +657,10 @@ public void process(APDU apdu) throws ISOException, APDUException {
         // copy TCert details into sigBuffer and verify signature. If it verifies, terminal is authenticated, so positive response can be returned :)
         Util.arrayCopyNonAtomic(tInfo, (short) 2, sigBuffer, (short) 0, (short) 4); // terminal ID
         sigBuffer[(short) 4] = tInfo[(short) 0]; // terminal type
-        Util.arrayCopyNonAtomic(buffer, (short) 36, sigBuffer, (short) 5, (short) 4); // Expiration date of the certificate 
+        Util.arrayCopyNonAtomic(buffer, (short) 36, sigBuffer, (short) 5, (short) 4); // Expiration date of the certificate
 
         signature.init(puks, Signature.MODE_VERIFY);
-        
+
         if (!signature.verify(sigBuffer, (short) 0, (short) 9, buffer, (short) 20, SIGN_LENGTH)) {
             select(); // reset
             ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
@@ -685,12 +686,12 @@ public void process(APDU apdu) throws ISOException, APDUException {
         incNonce(nonceT);
         AESCipher.init(skey, Cipher.MODE_ENCRYPT);
         AESCipher.doFinal(nonceT, (short) 0, NONCE_LENGTH, buffer, (short) 0); // nonce is 8 bytes, so exactly one AES block of 64 bits
-        
+
         apdu.setOutgoingAndSend((short) 0, (short) NONCE_LENGTH);
     }
 
     /**
-     * Does the personalisation phase of the card. 
+     * Does the personalisation phase of the card.
      *
      * Assumes that it was checked whether personalisation was allowed.
      * Assumes that the apdu buffer was the correct length.
@@ -713,11 +714,11 @@ public void process(APDU apdu) throws ISOException, APDUException {
 
     private void personalise1(APDU apdu, byte[] buffer) {
         buffer = apdu.getBuffer();
-        
+
         JCSystem.beginTransaction();
         purkc.setW(buffer, PURKC_PERS_OFFSET, EC_PUB_KEY_LENGTH);
         puks.setW(buffer, PUKS_PERS_OFFSET, EC_PUB_KEY_LENGTH);
-        
+
         // get CCert and its information
         Util.arrayCopy(buffer, CCERT_PERS_OFFSET, CCert, (short) 0, SIGN_LENGTH);
         Util.arrayCopy(buffer, CCERT_EXP_PERS_OFFSET, CCertExp, (short) 0, DATE_LENGTH);
@@ -727,7 +728,7 @@ public void process(APDU apdu) throws ISOException, APDUException {
         signature.init(puks, Signature.MODE_VERIFY);
         signature.update(cID, (short) 0, (short) 4);
         signature.update(TYPE_CARD_A, (short) 0, (short) 1);
-        
+
         if (!signature.verify(CCertExp, (short) 0, (short) DATE_LENGTH, CCert, (short) 0, (short) 56)) {
             System.out.println("Signature not verifiable");
             JCSystem.abortTransaction();
@@ -740,7 +741,7 @@ public void process(APDU apdu) throws ISOException, APDUException {
         // Readback to ensure correct receiving, no bitrot
         apdu.setOutgoingAndSend((short) 5, PERS_INC_LEN1);
     }
-	
+
 	private void charge(APDU apdu, byte[] buffer) {
 		switch (status[(short) 0] & 0xf0){
 			case 0x00:
@@ -755,7 +756,7 @@ public void process(APDU apdu) throws ISOException, APDUException {
                 break;
 		}
 	}
-	
+
 	private void chargePhase1(APDU apdu, byte[] buffer) {
 		/* Charge part 1
 		 *
@@ -772,17 +773,17 @@ public void process(APDU apdu) throws ISOException, APDUException {
         if (lc_length < (byte) CHAR1_INC_LEN) {
             ISOException.throwIt((short) (SW_WRONG_LENGTH | CHAR1_INC_LEN));
         }
-		
+
 		buffer = apdu.getBuffer();
 		AESCipher.init(skey, Cipher.MODE_DECRYPT);
 		AESCipher.doFinal(buffer, (short) 0, SIGN_LENGTH, nonceT, (short) 0);
 		incNonce(nonceT);
 		tNum = (short) (tNum + 1);
-		
+
 		short expectedLength = apdu.setOutgoing();
         if (expectedLength < (short) CHAR1_RESP_LEN) ISOException.throwIt((short) (SW_WRONG_LENGTH | CHAR1_RESP_LEN));
         apdu.setOutgoingLength((byte) CHAR1_RESP_LEN);
-		
+
 		Util.arrayCopy(cID, (short) 0, buffer, (short) 0, (short) 4);
 		buffer[(short) 5] = (byte) (petrolCredits & 0xff);
 		buffer[(short) 6] = (byte) ((petrolCredits >> 8) & 0xff);
@@ -793,13 +794,13 @@ public void process(APDU apdu) throws ISOException, APDUException {
 		// hash the data?
 		signature.init(skey, Signature.MODE_SIGN);
 		signature.sign(buffer, (short) 0, (short) 16, buffer, (short) 8);
-		
+
 		apdu.setOutgoingAndSend((short) 0, (short) CHAR1_RESP_LEN);
 		status[(short) 0] = (byte) (status[(short) 0] + 0x10);
-		
-		
+
+
 	}
-	
+
 	private void chargePhase2(APDU apdu, byte[] buffer) {
 		/* Charge part 2
 		 *
@@ -819,12 +820,12 @@ public void process(APDU apdu) throws ISOException, APDUException {
         if (lc_length < (byte) CHAR2_INC_LEN) {
             ISOException.throwIt((short) (SW_WRONG_LENGTH | CHAR2_INC_LEN));
         }
-		
+
 		buffer = apdu.getBuffer();
 		Util.arrayCopy(buffer, (short) 0, sigBuffer, (short) 0, (short) 8);
 		incNonce(nonceT);
 		Util.arrayCopy(nonceT, (short) 0, sigBuffer, (short) 8, (short) NONCE_LENGTH);
-		
+
 
 
 		signature.init(skey, Signature.MODE_VERIFY);
@@ -837,7 +838,7 @@ public void process(APDU apdu) throws ISOException, APDUException {
 		petrolCredits = (short) (petrolCredits + buffer[(short) 5]);
 		petrolCredits = (short) (petrolCredits + (buffer[(short) 6]<< 8));
 
-		
+
 		short expectedLength = apdu.setOutgoing();
         if (expectedLength < (short) CHAR2_RESP_LEN) ISOException.throwIt((short) (SW_WRONG_LENGTH | CHAR2_RESP_LEN));
         apdu.setOutgoingLength((byte) CHAR2_RESP_LEN);
@@ -846,7 +847,7 @@ public void process(APDU apdu) throws ISOException, APDUException {
 		Util.arrayCopy(TCert, (short) 0, sigBuffer, (short) 4, (short) SIGN_LENGTH);
 		sigBuffer[(short) 20] = (byte) (petrolCredits & 0xff);
 		sigBuffer[(short) 21] = (byte) ((petrolCredits >> 8) & 0xff);
-		short tNum = (short) (tNum + 1);
+		tNum = (short) (tNum + 1);
 		sigBuffer[(short) 22] = (byte) (tNum & 0xff);
 		sigBuffer[(short) 23] = (byte) ((tNum >> 8) & 0xff);
 
@@ -1064,12 +1065,12 @@ public void process(APDU apdu) throws ISOException, APDUException {
 
 	/**
 	 * Revokes the validity of the card.
-	 * 
+	 *
 	 * Assumes that the terminal and card are authenticated.
 	 * Assumes that the validity of the revoking instruction certificate has been checked.
 	 *
 	private void revoke(APDU apdu, byte[] buffer) {
-		
+
 		status[(short) 0] = (byte) 0x04; // Card status is now revoked
 	} */
 }
