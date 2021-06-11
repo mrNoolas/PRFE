@@ -309,6 +309,8 @@ public class TCons extends JPanel implements ActionListener {
         short amount = 0;
         //amount = entered by the buyer
         //TODO: read input and put this value into short amount
+
+        //buffer for key listener and read in from that
         //card has quota balance
         if (petrolQuotaOnCard - amount < 0){
             throw new Exception("Invalid amount");

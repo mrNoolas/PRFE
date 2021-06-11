@@ -963,9 +963,9 @@ public class CardApplet extends Applet implements ISO7816 {
 
         //sign hashed data
         signature.init(skey, Signature.MODE_SIGN);
-        byte[] signedData = signature.sign(hashedData);
+        signature.sign(hashedData, (short) 0, (short) 20, sigBuffer, (short) 0); //TODO: hash message length
 
-        //verified = 1 byte, mac = 16 bytes  -> outgoing length 17 bytes?
+        //verified = 1 byte, signature length 56?
         short expectedLength = apdu.setOutgoing();
 
         if (expectedLength < (short) CONS2_RESP_LEN) ISOException.throwIt((short) (SW_WRONG_LENGTH | CONS2_RESP_LEN));
@@ -976,7 +976,7 @@ public class CardApplet extends Applet implements ISO7816 {
         //  buffer[(short) 0] = (byte) CARD_TYPE;
         //  buffer[(short) 1] = (byte) CARD_SOFTWARE_VERSION;
         buffer[(short) 0] = (byte) verified;
-        Util.arrayCopyNonAtomic(signedData, (short) 0, buffer, (short) 1, (short) 16);  //TODO: change signature length
+        Util.arrayCopyNonAtomic(sigBuffer, (short) 0, buffer, (short) 1, (short) 56);  //TODO: change signature length
 
         apdu.sendBytes((short) 0, (short) CONS2_RESP_LEN);
         status[(short) 0] = (byte) (status[(short) 0] + 0x20);
