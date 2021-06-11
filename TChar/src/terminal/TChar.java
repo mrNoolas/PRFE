@@ -200,13 +200,13 @@ public class TChar extends JPanel implements ActionListener {
 	}
 
 
-	public void charge(CardApplet card) {
+	public void charge(CardApplet card) throws CardException, Exception{
 		byte[] sigBuffer = new byte[2*SIGN_LENGTH];
 
 		signature.init(skey, Signature.MODE_SIGN);
 		signature.sign(nonceT, (short) 0, (short) 8, sigBuffer, (short) 0);
 		CommandAPDU chargeCommand = new CommandAPDU((int) PRFE_CLA, (int) CHAR_INS, (int)TERMINAL_TYPE, (int)TERMINAL_SOFTWARE_VERSION, sigBuffer);
-		ResponseAPDU response;
+		ResponseAPDU response = null;
 		try {
 			response = applet.transmit(chargeCommand);
 		} catch (CardException e) {
@@ -228,7 +228,6 @@ public class TChar extends JPanel implements ActionListener {
 		signature.init(skey, Signature.MODE_VERIFY);
 		if (!signature.verify(sigBuffer, (short) 0, (short) 16, data, (short) 8, SIGN_LENGTH)) {
 			throw new Exception("Signature invalid");
-
 		}
 
 		short extraQuota = getMonthlyQuota(cardID);
@@ -262,24 +261,24 @@ public class TChar extends JPanel implements ActionListener {
 		sigBuffer[63] = (byte) ((tNum >> 8) & 0xff);
 
 		signature.init(skey, Signature.MODE_VERIFY);
+
 		if (!signature.verify(sigBuffer, (short) 0, (short) 64, data, (short) 0, SIGN_LENGTH)) {
 			throw new Exception("Signature invalid");
-		}
+
 
 		incNonce(nonceT);
 		if (!signature.verify(nonceT, (short) 0, (short) 8, data, SIGN_LENGTH, SIGN_LENGTH)) {
 			throw new Exception("Signature invalid");
-		}
 
 	}
 
 	private short getMonthlyQuota(byte[] cardID) {
-		return 1;
+		return (short) 1;
 	}
 
 	public byte[] hash(byte[] data) {
 		// Hash the message using hash function
-		byte[] hash;
+		byte[] hash = null;
 		MessageDigest md = MessageDigest.getInstance(MessageDigest.ALG_SHA, false);
 		md.doFinal(data, (short) 0, (short) data.length, hash, (short) 0);
 		md.reset();
@@ -293,7 +292,13 @@ public class TChar extends JPanel implements ActionListener {
 
 
 		CommandAPDU chargeCommand = new CommandAPDU((int)PRFE_CLA, (int) CHAR_INS, (int) TERMINAL_TYPE, (int) TERMINAL_SOFTWARE_VERSION);
-		ResponseAPDU response = applet.transmit(chargeCommand);
+		ResponseAPDU response = null;
+		try {
+			response = applet.transmit(chargeCommand);
+		} catch (CardException e) {
+			System.out.println(e);
+		}
+
 		byte[] responseBytes = response.getBytes();
 		byte[] data = response.getData();
 
@@ -301,7 +306,11 @@ public class TChar extends JPanel implements ActionListener {
 		short petrolCredit = data[(short) 0];
 		petrolCredit = (short) (petrolCredit + monthlyQuota);
 		chargeCommand = new CommandAPDU((int)PRFE_CLA, (int) CHAR_INS, (short) monthlyQuota, (int) 0);
-		response = applet.transmit(chargeCommand);
+		try {
+			response = applet.transmit(chargeCommand);
+		} catch (CardException e) {
+			System.out.println(e);
+		}
 
 
 
