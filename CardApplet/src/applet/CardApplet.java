@@ -21,7 +21,7 @@ private static final short PERS_INC_LEN0 = 228;
 private static final short PERS_INC_LEN1 = 172;
 private static final short READ_INC_LEN = 4;
 private static final short AUTH1_INC_LEN = 93; 
-private static final short AUTH2_INC_LEN = 200; // TODO update this
+private static final short AUTH2_INC_LEN = 144;
 private static final short REVOKE_INC_LENGTH = 24; // Sign length + nonce length
 
 private static final short CHAR1_INC_LEN = 56;
@@ -185,7 +185,7 @@ public static void install(byte[] buffer, short offset, byte length)
 
 public boolean select() {
     status[0] = (byte) 0x00; // unitialised
-    tInfo[0] = 0x00000000; // sets entire array to 0 (6 bytes)
+    tInfo[0] = 0x000000; // sets entire array to 0 (6 bytes)
 
     return true;
 }
@@ -195,6 +195,8 @@ public void process(APDU apdu) throws ISOException, APDUException {
     byte[] buffer = apdu.getBuffer();
     byte ins = buffer[OFFSET_INS];
     short lc_length;
+
+    //TODO: check for status revoked
 
     /* Ignore the APDU that selects this applet... */
     if (selectingApplet()) return;
@@ -392,11 +394,11 @@ public void process(APDU apdu) throws ISOException, APDUException {
      */
     private boolean checkAndCopyTypeAndVersion(byte[] buffer) {
         short type = (short) (buffer[OFFSET_P1] & 0xff);
-        boolean plausible = type < (short) 4 || type == (short) 0xff; // The type should at least be in the right numeric range.
+        boolean plausible = type < (short) 4 || type == (short) 0x0f; // The type should at least be in the right numeric range.
         short s = (short) (status[(short) 0] & 0xff);
 
         // Terminal type should stay the same as before, otherwise the authentication fails.
-        if ((s != (short) 0xff && s > (short) 3) || (s > (short) 0 && tInfo[(short) 0] != type) || !plausible) return false;
+        if ((s != (short) 0x0f && s > (short) 4) || (s > (short) 0 && tInfo[(short) 0] != type) || !plausible) return false;
 
         tInfo[(short) 0] = buffer[OFFSET_P1]; // terminal type
         tInfo[(short) 1] = buffer[OFFSET_P2]; // terminal software version
@@ -536,7 +538,7 @@ public void process(APDU apdu) throws ISOException, APDUException {
         termVerifInit(buffer[OFFSET_P1]);
         signature.update(buffer, OFFSET_P1, (short) 2);
         if (!signature.verify(buffer, (short) 5, (short) 37, buffer, SK_EXCH_SIG1_OFFSET, SIGN_LENGTH)) {
-            System.out.println("Signature invalid");
+            System.out.println("1Signature invalid");
             select(); // reset
             ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
         }
@@ -578,9 +580,6 @@ public void process(APDU apdu) throws ISOException, APDUException {
         // generate fresh random nonceC
         // TODO: seed is the same for each reinstantiation of the card: explain in report why this is, or is not a problem.
         random.generateData(nonceC, (short) 0, (short) 8);
-        System.out.print("Fresh random card nonce: ");
-        for (byte b : nonceC) System.out.printf("%x ", b);
-        System.out.println();
 
         // Prepare the encryption buffer
         Util.arrayCopyNonAtomic(cID, (short) 0, buffer, (short) 33, (short) 4); // card ID
@@ -627,41 +626,44 @@ public void process(APDU apdu) throws ISOException, APDUException {
 
         // Decrypt into buffer
         AESCipher.init(skey, Cipher.MODE_DECRYPT);
-        AESCipher.doFinal(buffer, (short) 0, (short) 56, buffer, (short) 0);
+        AESCipher.doFinal(buffer, (short) 5, (short) 144, buffer, (short) 5);
 
-        if (Util.arrayCompare(buffer, (short) 0, tInfo, (short) 2, (short) 4) != (byte) 0) {
+        if (Util.arrayCompare(buffer, (short) 5, tInfo, (short) 2, (short) 4) != (byte) 0) {
             select(); // reset status
             ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
         }
 
         // Verify the signature over the message
-        Util.arrayCopyNonAtomic(tInfo, (short) 0, sigBuffer, (short) 0, (short) 6);
-        Util.arrayCopyNonAtomic(buffer, (short) 4, sigBuffer, (short) 6, (short) 36);
-        termVerif(sigBuffer, (short) 0, (short) 42, buffer, (short) 40);
+        termVerifInit(buffer[OFFSET_P1]);
+        signature.update(buffer, OFFSET_P1, (short) 2);
+        if (!signature.verify(buffer, (short) 5, (short) 80, buffer, (short) 85, SIGN_LENGTH)) {
+            System.out.println("Signature invalid");
+            select(); // reset
+            ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
+        }
 
         incNonce(nonceC);
-        if (Util.arrayCompare(nonceC, (short) 0, buffer, (short) 12, NONCE_LENGTH) != (byte) 0) {
-            select();
+        if (Util.arrayCompare(nonceC, (short) 0, buffer, (short) 17, NONCE_LENGTH) != (byte) 0) {
+            select(); // reset
             ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
         }
 
         // All checks are done, now get the terminal nonce and verify the terminal certificate
-        Util.arrayCopyNonAtomic(buffer, (short) 4, nonceT, (short) 0, NONCE_LENGTH);
+        Util.arrayCopyNonAtomic(buffer, (short) 9, nonceT, (short) 0, NONCE_LENGTH);
 
         // Compare expiration date and the last known valid date: sanity check on dates
-        checkExpDate(buffer, (short) 36);
+        checkExpDate(buffer, (short) 76);
 
 		// Save TCert for charging operation
-		Util.arrayCopy(buffer, (short) 20, TCert, (short) 0, SIGN_LENGTH);
+		Util.arrayCopy(buffer, (short) 25, TCert, (short) 0, SIGN_LENGTH);
+        Util.arrayCopy(buffer, (short) 81, TCertExp, (short) 0, (short) 4);
 
         // copy TCert details into sigBuffer and verify signature. If it verifies, terminal is authenticated, so positive response can be returned :)
-        Util.arrayCopyNonAtomic(tInfo, (short) 2, sigBuffer, (short) 0, (short) 4); // terminal ID
-        sigBuffer[(short) 4] = tInfo[(short) 0]; // terminal type
-        Util.arrayCopyNonAtomic(buffer, (short) 36, sigBuffer, (short) 5, (short) 4); // Expiration date of the certificate
-
         signature.init(puks, Signature.MODE_VERIFY);
+        signature.update(tInfo, (short) 2, (short) 4); // terminal ID
+        signature.update(tInfo, (short) 0, (short) 1); // terminal type
 
-        if (!signature.verify(sigBuffer, (short) 0, (short) 9, buffer, (short) 20, SIGN_LENGTH)) {
+        if (!signature.verify(buffer, (short) 81, (short) 4, buffer, (short) 25, SIGN_LENGTH)) {
             select(); // reset
             ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
         }
@@ -685,9 +687,10 @@ public void process(APDU apdu) throws ISOException, APDUException {
         // return terminal nonce (incremented and encrypted) to confirm authentication successful.
         incNonce(nonceT);
         AESCipher.init(skey, Cipher.MODE_ENCRYPT);
-        AESCipher.doFinal(nonceT, (short) 0, NONCE_LENGTH, buffer, (short) 0); // nonce is 8 bytes, so exactly one AES block of 64 bits
+        AESCipher.update(nonceC, (short) 0, NONCE_LENGTH, buffer, (short) 0);
+        AESCipher.doFinal(nonceT, (short) 0, NONCE_LENGTH, buffer, (short) 0); // nonce is 8 bytes, so two nonces is exactly one AES block of 128 bits
 
-        apdu.setOutgoingAndSend((short) 0, (short) NONCE_LENGTH);
+        apdu.setOutgoingAndSend((short) 0, (short) (2*NONCE_LENGTH));
     }
 
     /**
