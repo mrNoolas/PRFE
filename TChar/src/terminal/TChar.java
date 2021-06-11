@@ -286,26 +286,6 @@ public class TChar extends JPanel implements ActionListener {
 		return hash;
 	}
 
-	public boolean verify(byte[] data, byte[] key) {
-		// Verify if a given signature is correct
-		// If correct: output true
-		// If incorrect: output false
-	}
-
-	public byte[] sign(byte[] data, byte[] key) {
-		// Sign a given message to ensure integrity
-
-	}
-
-	public byte[] mac(byte[] data) {
-		// Returns the MAC of the data
-		Mac mac = Mac.getInstance("ALG_AES_CMAC_128");
-		mac.init(skey);
-
-		byte[] macResult = mac.doFinal(data);
-		return macResult;
-	}
-
 	public void updateQuota(CardApplet card) {
 		// Updates the quota on the card
 		// Requires authenticateCardAndBuyer()
