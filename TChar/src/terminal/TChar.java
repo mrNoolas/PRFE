@@ -5,7 +5,7 @@ import javacard.framework.ISO7816;
 import javacard.framework.*;
 import javacard.security.*;
 import javacardx.crypto.*;
-import javax.crypto.*;
+//import javax.crypto.*;
 
 import java.awt.BorderLayout;
 import java.awt.Color;
@@ -244,7 +244,7 @@ public class TChar extends JPanel implements ActionListener {
 
 		signature.init(skey, Signature.MODE_SIGN);
 		signature.sign(data, (short) 0, (short) 16, data, (short) 8);
-		CommandAPDU chargeCommand = new CommandAPDU((int) PRFE_CLA, (int) CHAR_INS, (int) TERMINAL_TYPE, (int)TERMINAL_SOFTWARE_VERSION, data);
+		chargeCommand = new CommandAPDU((int) PRFE_CLA, (int) CHAR_INS, (int) TERMINAL_TYPE, (int)TERMINAL_SOFTWARE_VERSION, data);
 		try {
 			response = applet.transmit(chargeCommand);
 		} catch (CardException e) {
@@ -253,7 +253,7 @@ public class TChar extends JPanel implements ActionListener {
 
 
 		data = response.getData();
-		System.arraycopy(cID, 0, sigBuffer, 0, 4);
+		System.arraycopy(cardID, 0, sigBuffer, 0, 4);
 		System.arraycopy(TCert, 0, sigBuffer, 4, SIGN_LENGTH);
 		petrolQuota += extraQuota;
 		sigBuffer[60] = (byte) (petrolQuota & 0xff);
@@ -303,7 +303,7 @@ public class TChar extends JPanel implements ActionListener {
 
 	public byte[] mac(byte[] data) {
 		// Returns the MAC of the data
-		Mac mac = Mac.getInstance("");
+		Mac mac = Mac.getInstance("ALG_AES_CMAC_128");
 		mac.init(skey);
 
 		byte[] macResult = mac.doFinal(data);
@@ -324,7 +324,7 @@ public class TChar extends JPanel implements ActionListener {
 
 		short petrolCredit = data[(short) 0];
 		petrolCredit = (short) (petrolCredit + monthlyQuota);
-		CommandAPDU chargeCommand = new CommandAPDU((int)PRFE_CLA, (int) CHAR_INS, (short) monthlyQuota, (int) 0);
+		chargeCommand = new CommandAPDU((int)PRFE_CLA, (int) CHAR_INS, (short) monthlyQuota, (int) 0);
 		response = applet.transmit(chargeCommand);
 
 
