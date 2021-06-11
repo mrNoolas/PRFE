@@ -881,8 +881,8 @@ public void process(APDU apdu) throws ISOException, APDUException {
     }
 
     private void consumePhase1(APDU apdu, byte[] buffer) {
-        /*
-        lc_length = apdu.setIncomingAndReceive();
+
+        short lc_length = apdu.setIncomingAndReceive();
         if (lc_length < (byte) CONS1_INC_LENGTH) {
             ISOException.throwIt((short) (SW_WRONG_LENGTH | CONS1_INC_LENGTH));
         }
@@ -894,25 +894,25 @@ public void process(APDU apdu) throws ISOException, APDUException {
         AESCipher.doFinal(buffer, (short) 0, (short) 8, nonceT, (short) 0);
 
         //card sends back to the terminal:
-        card-id (4 bytes), petrolcredits (short), mac(hash{card-id, petrolCredits, incNonce(nonceT)}, skey)
-        -> signature length is 20 bytes
+        //card-id (4 bytes), petrolcredits (short), mac(hash{card-id, petrolCredits, incNonce(nonceT)}, skey -> signature length?
 
 
-        nonceC = incNonce(nonceT);
+        incNonce(nonceT); //sequence nr + 1
+        nonceC = nonceT;
         //hashedData = hash(card-id, petrolCredits, nonceC) -> hashing algorithm? SHA-1?
 
         //copy data to be hashed into sigbuffer
         Util.arrayCopyNonAtomic(cID, (short) 0, sigBuffer, (short) 0, (short) 4);
         Util.setShort(sigBuffer, (short) 4, petrolCredits);
-        Util.arrayCopyNonAtomic(nonceC, (short) 0, sigBuffer, (short) 6, (short) NONCE_LENGTH);
+        Util.arrayCopyNonAtomic(nonceT, (short) 0, sigBuffer, (short) 6, (short) NONCE_LENGTH);
 
         //hash the data with hashing algorithm
-        MessageDigest md = MessageDigest.getInstance("SHA-1"); // TODO: hash algorithm?
-        byte[] hashedData = md.doFinal(sigBuffer);
+        MessageDigest md = MessageDigest.getInstance(MessageDigest.ALG_SHA, false); // TODO: hash algorithm? SHA-1 gives 20-bytes?
+        md.doFinal(sigBuffer, (short) 0, (short) 14, sigBuffer, (short) 0);
 
         //construct mac and sign data
-        signature.init(skey, MODE_SIGN);
-        byte[] signedData = signature.sign(hashedData); //(should be 16 bytes?) so the total length of the data to send is 4+2+16 = 22 bytes of data
+        signature.init(skey, Signature.MODE_SIGN);
+        signature.sign(sigBuffer, (short) 0, (short) 20, sigBuffer, (short) 0);
 
         short expectedLength = apdu.setOutgoing();
 
@@ -925,24 +925,27 @@ public void process(APDU apdu) throws ISOException, APDUException {
        // buffer[(short) 1] = (byte) CARD_SOFTWARE_VERSION;
         Util.arrayCopyNonAtomic(cID, (short) 0, buffer, (short) 0, (short) 4);
         Util.setShort(buffer, (short) 4, petrolCredits);
-        Util.arrayCopyNonAtomic(signedData, (short) 0, buffer, (short) 6, (short) 16);
+        Util.arrayCopyNonAtomic(sigBuffer, (short) 0, buffer, (short) 6, (short) SIGN_LENGTH);
 
         apdu.sendBytes((short) 0, (short) CONS1_RESP_LEN);
         status[(short) 0] = (byte) (status[(short) 0] + 0x10);
-*/
+
     }
 
     private void consumePhase2(APDU apdu, byte[] buffer){
-        /*
-        lc_length = apdu.setIncomingAndReceive();
+
+        short lc_length = apdu.setIncomingAndReceive();
         if (lc_length < (byte) CONS2_INC_LENGTH) {
             ISOException.throwIt((short) (SW_WRONG_LENGTH | CONS2_INC_LENGTH));
         }
 
         buffer = apdu.getBuffer();
 
-        nonceT = incNonce(nonceC); // we dont send nonceT in the response from terminal, so increment it here
-        nonceC = incNonce(nonceT); // sequence number to send in response is nonceC
+        incNonce(nonceC);
+        nonceT = nonceC; //we dont send nonceT in the response from terminal, so increment it here (sequence nr + 2)
+        incNonce(nonceT);
+        nonceC = nonceT; // sequence nr + 3
+
 
         //offset in data buffer for the signature is 6 (card id and quota precede it)
         //data to verify is: cardID, nonceT, incomingPetrolQuota = 4, 8, 2 = 14 bytes
@@ -952,32 +955,33 @@ public void process(APDU apdu) throws ISOException, APDUException {
 
         Util.arrayCopyNonAtomic(buffer, (short) 0, sigBuffer, (short) 0, (short) 4);
         Util.setShort(sigBuffer, (short) 4, incomingPetrolQuota);
-        Util.arrayCopyNonAtomic(buffer, (short) 6, nonceT, (short) 0, (short) 8);
+        Util.arrayCopyNonAtomic(buffer, (short) 6, nonceT, (short) 0, (short) NONCE_LENGTH);
 
         signature.init(skey, Signature.MODE_VERIFY);
         boolean verified = signature.verify(sigBuffer, (short) 0, (short) 14, buffer, (short) 6, (short) 16);
-
-        if (verified) {
-            //if verified, we update the petrolcredits on the card, otherwise we skip this step
-            petrolCredits = (short) petrolCredits - (short) incomingPetrolQuota;
+        byte verifyByte = (byte) 0;
+        //if verified, we update the petrolcredits on the card, otherwise we skip this step
+        if (verified = true){
+            verifyByte = (byte) 1;
+            petrolCredits = (short) (petrolCredits - incomingPetrolQuota);
         }
+
 
         //send response to terminal with: verified, mac(hash{card-id, verified, nonceC}, skey)
         //hash the data to send
 
-        byte[] dataToHash = JCSystem.makeTransientByteArray((short) 14, JCSystem.CLEAR_ON_RESET);
-        Util.arrayCopyNonAtomic(cID, (short) 0, dataToHash, (short) 0, (short) 4);
-        dataToHash[(short) 4] = (byte) verified;
-        Util.arrayCopyNonAtomic(nonceC, (short) 0, dataToHash, (short) 5, (short) NONCE_LENGTH);
+        Util.arrayCopyNonAtomic(cID, (short) 0, sigBuffer, (short) 0, (short) 4);
+        sigBuffer[(short) 4] = verifyByte;
+        Util.arrayCopyNonAtomic(nonceC, (short) 0, sigBuffer, (short) 5, (short) NONCE_LENGTH);
 
-        MessageDigest md = MessageDigest.getInstance("SHA-1"); // TODO: hash algorithm?
-        byte[] hashedData = md.doFinal(dataToHash);
+        MessageDigest md = MessageDigest.getInstance(MessageDigest.ALG_SHA, false);
+        md.doFinal(sigBuffer, (short) 0, (short) 13, sigBuffer, (short) 0);
 
         //sign hashed data
         signature.init(skey, Signature.MODE_SIGN);
-        byte[] signedData = signature.sign(hashedData);
+        signature.sign(sigBuffer, (short) 0, (short) 20, sigBuffer, (short) 0);
 
-        //verified = 1 byte, mac = 16 bytes  -> outgoing length 17 bytes?
+        //verified = 1 byte, signature = 56?
         short expectedLength = apdu.setOutgoing();
 
         if (expectedLength < (short) CONS2_RESP_LEN) ISOException.throwIt((short) (SW_WRONG_LENGTH | CONS2_RESP_LEN));
@@ -987,42 +991,39 @@ public void process(APDU apdu) throws ISOException, APDUException {
 
       //  buffer[(short) 0] = (byte) CARD_TYPE;
       //  buffer[(short) 1] = (byte) CARD_SOFTWARE_VERSION;
-        buffer[(short) 0] = (byte) verified;
-        Util.arrayCopyNonAtomic(signedData, (short) 0, buffer, (short) 1, (short) 16);  //TODO: change signature length
+        buffer[(short) 0] = verifyByte;
+        Util.arrayCopyNonAtomic(sigBuffer, (short) 0, buffer, (short) 1, (short) SIGN_LENGTH);  //TODO: change signature length
 
         apdu.sendBytes((short) 0, (short) CONS2_RESP_LEN);
         status[(short) 0] = (byte) (status[(short) 0] + 0x20);
-*/
     }
 
     private void consumePhase3(APDU apdu, byte[] buffer){
-/*
-        lc_length = apdu.setIncomingAndReceive();
+
+        short lc_length = apdu.setIncomingAndReceive();
         if (lc_length < (byte) CONS3_INC_LENGTH) {
             ISOException.throwIt((short) (SW_WRONG_LENGTH | CONS3_INC_LENGTH));
         }
 
         buffer = apdu.getBuffer();
 
-        nonceT = incNonce(nonceC);
-        nonceC = incNonce(nonceT);
+        incNonce(nonceC);
+        nonceT = nonceC; //sequence nr + 4
+        incNonce(nonceT);
+        nonceC = nonceT; //sequence nr + 5
 
-        ByteBuffer data = ByteBuffer.wrap(buffer);
+        short incomingPetrolQuota = (short) Util.getShort(buffer, (short) 4); //read the short value after the card-id
 
-        short incomingPetrolQuota = (short) data.getShort((short) 4); //read the short value after the card-id
+        Util.arrayCopyNonAtomic(buffer, (short) 0, sigBuffer, (short) 0, (short) 4); //copy card-id
+        Util.setShort(sigBuffer, (short) 4, incomingPetrolQuota); //set incoming petrol credit value
+        Util.arrayCopyNonAtomic(buffer, (short) 6, nonceT, (short) 0, (short) NONCE_LENGTH); //sequence number
 
-        byte[] dataToVerify = JCSystem.makeTransientByteArray((short) 14, JCSystem.CLEAR_ON_RESET);
-        Util.arrayCopyNonAtomic(buffer, (short) 0, dataToVerify, (short) 0, (short) 4); //copy card-id
-        Util.setShort(dataToVerify, (short) 4, incomingPetrolQuota); //set incoming petrol credit value
-        Util.arrayCopyNonAtomic(buffer, (short) 6, nonceT, (short) 0, (short) 8); //sequence number
-
-        mac = Signature.getInstance(MessageDigest.ALG_NULL, SIG_CIPHER_AES_CMAC_128, Cipher.PAD_ISO9797_M2);
-        mac.init(skey, Signature.MODE_VERIFY);
-        boolean verified = signature.verify(dataToVerify, (short) 0, (short) 14, data, (short) 6, (short) 16);
+        signature.init(skey, Signature.MODE_VERIFY);
+        boolean verified = signature.verify(sigBuffer, (short) 0, (short) 14, buffer, (short) 6, (short) SIGN_LENGTH);
 
         if(verified){
             if ((short) incomingPetrolQuota < (short) petrolCredits){
-                petrolCredits = petrolCredits + incomingPetrolQuota;
+                petrolCredits = (short) (petrolCredits + incomingPetrolQuota);
             }
 
             short expectedLength = apdu.setOutgoing();
@@ -1040,7 +1041,7 @@ public void process(APDU apdu) throws ISOException, APDUException {
          //   Util.setShort(sigBuffer, (short) 20, petrolCredits);
             sigBuffer[(short) 20] = (byte) (petrolCredits & 0xff);
             sigBuffer[(short) 21] = (byte) ((petrolCredits >> 8) & 0xff);
-            (short) tNum = (short) (tNum + 1);
+            tNum = (short) (tNum + 1);
             //Util.setShort(sigBuffer, (short) 22, tNum);
             sigBuffer[(short) 22] = (byte) (tNum & 0xff);
             sigBuffer[(short) 23] = (byte) ((tNum >> 8) & 0xff);
@@ -1048,7 +1049,6 @@ public void process(APDU apdu) throws ISOException, APDUException {
             signature.init(skey, Signature.MODE_SIGN);
             signature.sign(sigBuffer, (short) 0, (short) 24, buffer, (short) 0);
 
-            incNonce(nonceT);
             signature.sign(nonceT, (short) 0, NONCE_LENGTH, buffer, SIGN_LENGTH);
 
             apdu.setOutgoingAndSend((short) 0, (short) CONS3_RESP_LEN);
@@ -1060,7 +1060,7 @@ public void process(APDU apdu) throws ISOException, APDUException {
             select();
             ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
         }
-*/
+
     }
 
 	/**

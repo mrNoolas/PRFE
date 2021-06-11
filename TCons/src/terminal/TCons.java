@@ -285,7 +285,7 @@ public class TCons extends JPanel implements ActionListener {
         } catch (CardException e) {
             // TODO: do something with the exception
             System.out.println(e);
-            return 0;
+            System.exit(0);
         }
 
         //verify response
@@ -303,11 +303,11 @@ public class TCons extends JPanel implements ActionListener {
         signature.init(skey, Signature.MODE_VERIFY);
         if (!signature.verify(sigBuffer, 0, 14, data, 6, SIGN_LENGTH)) {
             throw new Exception("Signature invalid");
-
         }
 
         short amount = 0;
         //amount = entered by the buyer
+
         //TODO: read input and put this value into short amount
 
         //buffer for key listener and read in from that
@@ -382,6 +382,7 @@ public class TCons extends JPanel implements ActionListener {
     }
 
     void setMaxGas(short wantedPetrol){
+        
         return;
     };                                                                             //set the max amount of gas available to the buyer based on the quota on card (a short?)
 
@@ -456,9 +457,10 @@ public class TCons extends JPanel implements ActionListener {
         add(display, BorderLayout.NORTH);
         keypad = new JPanel(new GridLayout(5, 5));
         key("Read");
+        key("Personalise");
         key("Authenticate");
-        key(null);
-        key(null);
+        key("Quit");
+        key("Dispense");
         key("C");
         key("7");
         key("8");
@@ -476,7 +478,6 @@ public class TCons extends JPanel implements ActionListener {
         key("-");
         key("M+");
         key("0");
-        key(null);
         key(null);
         key("+");
         key("=");
@@ -586,8 +587,16 @@ public class TCons extends JPanel implements ActionListener {
                         setText(readCard());
                         break;
                     case 'A': // authenticate
-                        //setText(authenticate());
+                        setText(authenticate());
                         break;
+                    case 'P':
+                        setText(personalise());
+                        break;
+                    case 'Q':
+                        System.exit(0);
+                        break;
+                    case 'D':
+                        setText(consumeQuota());
                     default:
                         setText(sendKey((byte) c));
                         break;
