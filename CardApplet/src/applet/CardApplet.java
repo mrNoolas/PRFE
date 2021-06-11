@@ -286,12 +286,12 @@ public void process(APDU apdu) throws ISOException, APDUException {
 		 * P2: Terminal Software Version
 		 * Lc: should be REVOKE_INC_LENGTH
 		 * Data: Signature over the revoke operation
-		 *
+		 */
 
 		if (!checkAndCopyTypeAndVersion(buffer)) ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
 
 		lc_length = apdu.setIncomingAndReceive();
-        if (lc_length < (byte) REVOKE_LENGTH) {
+        if (lc_length < (byte) REVOKE_INC_LENGTH) {
             ISOException.throwIt((short) (SW_WRONG_LENGTH | REVOKE_INC_LENGTH));
         }
 
@@ -304,13 +304,13 @@ public void process(APDU apdu) throws ISOException, APDUException {
 			Util.arrayCopyNonAtomic(buffer, SIGN_LENGTH, sigBuffer, (short) 5, NONCE_LENGTH); // Nonce
 
 
-			if (!verify(sigBuffer,(short) 0,(short) 13 ,buffer, (short) 0, SIGN_LENGTH)) {
+			if (!signature.verify(sigBuffer,(short) 0,(short) 13 ,buffer, (short) 0, SIGN_LENGTH)) {
 				ISOException.throwIt(SW_WRONG_DATA);
 			}
 			else {
 				revoke(apdu, buffer);
 			}
-		} */
+		} 
 
         break;
     case 0x50:
@@ -1068,9 +1068,9 @@ public void process(APDU apdu) throws ISOException, APDUException {
 	 *
 	 * Assumes that the terminal and card are authenticated.
 	 * Assumes that the validity of the revoking instruction certificate has been checked.
-	 *
+	 */
 	private void revoke(APDU apdu, byte[] buffer) {
 
 		status[(short) 0] = (byte) 0x04; // Card status is now revoked
-	} */
+	} 
 }

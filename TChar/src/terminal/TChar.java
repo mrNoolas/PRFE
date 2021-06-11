@@ -279,35 +279,11 @@ public class TChar extends JPanel implements ActionListener {
 
 	public byte[] hash(byte[] data) {
 		// Hash the message using hash function
-		try {
-			MessageDigest md = MessageDigest.getInstance(MessageDigest.ALG_SHA, false);
-			md.update(data, (short) 0, (short) data.length);
-
-			byte[] hash = md.digest();
-			return hash;
-		} catch (CryptoException e) {
-			System.out.println(e);
-		}
-	}
-
-	public boolean verify(byte[] data, byte[] key) {
-		// Verify if a given signature is correct
-		// If correct: output true
-		// If incorrect: output false
-	}
-
-	public byte[] sign(byte[] data, byte[] key) {
-		// Sign a given message to ensure integrity
-
-	}
-
-	public byte[] mac(byte[] data) {
-		// Returns the MAC of the data
-		Mac mac = Mac.getInstance("ALG_AES_CMAC_128");
-		mac.init(skey);
-
-		byte[] macResult = mac.doFinal(data);
-		return macResult;
+		byte[] hash;
+		MessageDigest md = MessageDigest.getInstance(MessageDigest.ALG_SHA, false);
+		md.doFinal(data, (short) 0, (short) data.length, hash, (short) 0);
+		md.reset();
+		return hash;
 	}
 
 	public void updateQuota(CardApplet card) {
