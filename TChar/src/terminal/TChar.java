@@ -279,15 +279,11 @@ public class TChar extends JPanel implements ActionListener {
 
 	public byte[] hash(byte[] data) {
 		// Hash the message using hash function
-		try {
-			MessageDigest md = MessageDigest.getInstance(MessageDigest.ALG_SHA, false);
-			md.update(data, (short) 0, (short) data.length);
-
-			byte[] hash = md.digest();
-			return hash;
-		} catch (CryptoException e) {
-			System.out.println(e);
-		}
+		byte[] hash;
+		MessageDigest md = MessageDigest.getInstance(MessageDigest.ALG_SHA, false);
+		md.doFinal(data, (short) 0, (short) data.length, hash, (short) 0);
+		md.reset();
+		return hash;
 	}
 
 	public boolean verify(byte[] data, byte[] key) {
