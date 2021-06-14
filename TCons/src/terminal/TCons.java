@@ -6,6 +6,7 @@ import javacard.framework.AID;
 import javacard.framework.ISO7816;
 import javacardx.crypto.*;
 
+import java.lang.*;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
@@ -18,6 +19,9 @@ import java.awt.event.ActionListener;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.util.List;
+import java.util.Arrays;
+import java.util.Random;
+import java.security.SecureRandom;
 
 import javax.smartcardio.Card;
 import javax.smartcardio.CardChannel;
@@ -59,6 +63,7 @@ public class TCons extends JPanel implements ActionListener {
 
     private static final byte TERMINAL_TYPE = (byte) 0x3;
 
+    private short maxGas;
 
 
 
@@ -137,6 +142,7 @@ public class TCons extends JPanel implements ActionListener {
         TCert = null;                                                                      // Terminal certificate containing
                                                                                            // ID, type of device and expiry date
         tID = new byte[TID_LENGTH];
+        maxGas = Short.MAX_VALUE;
 
         AESCipher = Cipher.getInstance(Cipher.ALG_AES_BLOCK_128_CBC_NOPAD, false);
         ECExch = KeyAgreement.getInstance(KeyAgreement.ALG_EC_SVDP_DH, false);
@@ -265,11 +271,11 @@ public class TCons extends JPanel implements ActionListener {
     public byte[] generateNonce(){
         //generate a 32 bit random nonce
         byte[] nonce = new byte[NONCET_LENGTH];
-        return random.nextBytes(nonce);
+        random.nextBytes(nonce, (short) 0, (short) 8);
+        return nonce;
     };
 
-    public void consumeQuota(){                                                        //use an amount of petrol quota on the card
-        //TODO: implement method to update the quota on the card
+    public String consumeQuota(){                                                        //use an amount of petrol quota on the card
         //send sequence number to card to start the consumption transaction
         byte[] nonceT = generateNonce();
         byte[] sigBuffer = new byte[2*SIGN_LENGTH];
@@ -281,83 +287,108 @@ public class TCons extends JPanel implements ActionListener {
         ResponseAPDU response = null;
         try {
             //card sends back apdu with the data after transmitting the commandAPDU to the card
-            response = applet.transmit(readCommand);
+            response = applet.transmit(consumeCommand);
         } catch (CardException e) {
             // TODO: do something with the exception
             System.out.println(e);
+            return "Transmit error";
         }
 
         //verify response
         byte[] data = response.getData();
         //data = card-id, quota, signedData
         byte[] cardID = new byte[4];
-        Util.arraycopy(data, 0, 4, cardID, 0, 4);
+        Util.arrayCopy(data, (short) 0, cardID, (short) 0, (short) 4);
         short petrolQuotaOnCard = Util.getShort(data, (short) 4);
-        byte[] nonceC = incNonce(nonceT); //sequence nr + 1
+        incNonce(nonceT); //sequence nr + 1
+        byte[] nonceC = nonceT;
 
         System.arraycopy(cardID, 0, sigBuffer, 0, 4);
         Util.setShort(sigBuffer, (short) 4, petrolQuotaOnCard);
         System.arraycopy(nonceC, 0, sigBuffer, 6, NONCET_LENGTH);
 
         signature.init(skey, Signature.MODE_VERIFY);
-        if (!signature.verify(sigBuffer, (short) 0, 14, data, 6, SIGN_LENGTH)) {
-            throw new Exception("Signature invalid");
-
+        if (!signature.verify(sigBuffer, (short) 0, (short) 14, data, (short) 6, SIGN_LENGTH)) {
+            return "Signature invalid";
         }
 
         short amount = 0;
         //amount = entered by the buyer
-        //TODO: read input and put this value into short amount
 
-        //buffer for key listener and read in from that
-        //card has quota balance
+        //TODO: read input and put this value into short amount
+        char[] inputAmount = new char[5]; //max value for short amounts is a 5 digit number, so input cant be more than that
+        //read input characters
+        //parse char[] as short -> inputamount as a string, then parseShort (string);
+        //if amount > Short.MAX_VALUE: return error -> amount exceeds maximum
+
+
+        //buffer for key listener and read in from that?
+        //card has quota balance, if amount is larger than this, return error
         if (petrolQuotaOnCard - amount < 0){
-            throw new Exception("Invalid amount");
+            return "Insufficient petrol credits left";
+        }
+        else if (amount > maxGas){
+            return "Requested amount larger than maximum value";
         }
         //if quota on card - amount < 0 : exit
-        short wantedPetrol = petrolQuotaOnCard - (short) amount;
-        nonceT = incNonce(nonceC); //sequence nr + 2
+        short wantedPetrol = (short) (petrolQuotaOnCard - amount);
+        incNonce(nonceC); //sequence nr + 2
+        nonceT = nonceC;
+
         byte[] dataBuffer = new byte[14];
         System.arraycopy(cardID, 0, dataBuffer, 0, 4);
         Util.setShort(dataBuffer, (short) 4, wantedPetrol);
         System.arraycopy(nonceT, 0, dataBuffer, 6, NONCET_LENGTH);
+
+
         signature.init(skey, Signature.MODE_SIGN);
-        signature.update(dataBuffer);
-        byte[] signedData = signature.sign();
-        System.arraycopy(signedData, 0, sigBuffer, 6, SIGN_LENGTH);
-        CommandAPDU cons2Command = new CommandAPDU((int) PRFE_CLA, (int) CHAR_INS, (int) TERMINAL_TYPE, (int)TERMINAL_SOFTWARE_VERSION, sigBuffer);
+        signature.sign(dataBuffer, (short) 0, (short) 14, sigBuffer, (short) 6);
+
+        CommandAPDU cons2Command = new CommandAPDU((int) PRFE_CLA, (int) CONS_INS, (int) TERMINAL_TYPE, (int)TERMINAL_SOFTWARE_VERSION, sigBuffer);
+
+        ResponseAPDU response2;
         try {
-            response = applet.transmit(cons2Command);
+            response2 = applet.transmit(cons2Command);
         } catch (CardException e) {
             System.out.println(e);
+            return "Transmit error";
         }
-        nonceC = incNonce(nonceT); //sequence nr + 3
-        nonceT = incNonce(nonceC); //sequence nr + 4
-        byte[] responseData = response.getData();
+        incNonce(nonceT); //sequence nr + 3
+        nonceC = nonceT;
+        incNonce(nonceC); //sequence nr + 4
+        nonceT = nonceC;
+        byte[] responseData = response2.getData();
         if(responseData[0] == (byte) 1){
-            setMaxGas(wantedPetrol);
-            if(getGasUsed() < wantedPetrol){
+            setMaxGas(amount);
+            short remainingPetrolQuota = getGasUsed(amount, petrolQuotaOnCard);
+            if(remainingPetrolQuota < wantedPetrol){
 
-                short updatedQuota = wantedPetrol - getGasUsed();
+                short updatedQuota = (short) (wantedPetrol - remainingPetrolQuota);
 
                 System.arraycopy(cardID, 0, dataBuffer, 0, 4);
                 Util.setShort(dataBuffer, (short) 4,  updatedQuota);
                 System.arraycopy(nonceT, 0, dataBuffer, 6, NONCET_LENGTH);
 
-                signature.init(skey, Signature.MODE_SIGN);
-                signature.update(dataBuffer);
-                signedData = signature.sign();
 
                 System.arraycopy(cardID, 0, sigBuffer, 0, 4);
                 Util.setShort(sigBuffer, (short) 4, updatedQuota);
                 System.arraycopy(signedData, 0, sigBuffer, 6, SIGN_LENGTH);
 
-                CommandAPDU cons3Command = new CommandAPDU((int) PRFE_CLA, (int) CHAR_INS, (int) TERMINAL_TYPE, (int)TERMINAL_SOFTWARE_VERSION, sigBuffer);
 
+                signature.init(skey, Signature.MODE_SIGN);
+                signature.sign(dataBuffer, (short) 0, (short) 14, sigBuffer, (short) 6);
+
+                CommandAPDU cons3Command = new CommandAPDU((int) PRFE_CLA, (int) CONS_INS, (int) TERMINAL_TYPE, (int)TERMINAL_SOFTWARE_VERSION, sigBuffer);
+
+                ResponseAPDU response3;
                 try {
-                    response = applet.transmit(cons3Command);
+
+                    response3 = applet.transmit(cons3Command);
                 } catch (CardException e) {
+                    //TODO: do something with the exception
                     System.out.println(e);
+
+                    return "Transmit error";
                 }
             }
         }
@@ -378,65 +409,73 @@ public class TCons extends JPanel implements ActionListener {
     }
 
     void setMaxGas(short wantedPetrol){
+        if (wantedPetrol > Short.MAX_VALUE){
+            System.out.print("Requested petrol amount too high");
+        }
+        maxGas = wantedPetrol;
         return;
     };                                                                             //set the max amount of gas available to the buyer based on the quota on card (a short?)
 
-    short getGasUsed(short maxGas, short amount){
+    short getGasUsed(short amount, short remainingPetrolQuota){
         //TODO: implement method to update amount of gas used by buyer
-        for(int i = 0; i < maxGas; i++){
 
+        for(int i = 0; i < amount; i++){
+            System.out.print("Dispensing petrol....");
+            remainingPetrolQuota -= 1; //reduce the remaining quota by 1, one step at a time, this should eventually equal
+                                        // petrolQuotaOnCard - amount, if not then we deal with this in terminal
         }
-
+    return remainingPetrolQuota;
     };                                                                                          //return the amount of gas dispensed
 
 
-    public byte[] sign(byte[] data){
-        signature.initSign(prkTCons);
-        signature.update(data);
-        byte[] signedData = signature.sign();
-        return signedData;
-    };
 
-    public byte[] hash(byte[] data){
-        //create message digest using a certain hash algorithm
-        MessageDigest md = MessageDigest.getInstance(""); //TODO: decide hash algorithm?
-        //use hash to hash the data
-        md.update(data);
-        //generate the hash of the data
-        byte[] hash = md.digest();
-        return hash;
-
-    };
-
-    public byte[] mac(byte[] data, AESKey key){                                                                              //mac code for sending data between card and terminal, using java.crypto.Mac object?
-        //create mac object
-        Mac mac = Mac.getInstance("SHA-1"); //TODO: algorithm for mac?
-        //initialise the Mac object with the skey
-        mac.init(key);
-        //compute mac
-        byte[] macResult = mac.doFinal(data);
-        return macResult;
-    };
-
-    public boolean verify(byte[] signedData, byte[] key){
-        signature.init(key, Signature.MODE_VERIFY);
-        signature.verify(signedData);
-        return true;
-    };
-
-    public byte[] encryptAES(byte[] data, AESKey key){
-        Cipher cipher = Cipher.getInstance("AES/ECB/PKCS5Padding");
-        cipher.init(Cipher.ENCRYPT_MODE, key);
-        byte[] encryptedData = cipher.doFinal(data);
-        return encryptedData;
-    }
-
-    public byte[] decryptAES(byte[] encryptedMessage, AESKey key){
-        Cipher cipher = Cipher.getInstance("AES/ECB/PKCS5PADDING");
-        cipher.init(Cipher.DECRYPT_MODE, key);
-        byte[] decryptedMessage = cipher.doFinal(encryptedMessage);
-        return decryptedMessage;
-    }
+//    public byte[] sign(byte[] data){
+//        signature.initSign(prkTCons);
+//        signature.update(data);
+//        byte[] signedData = signature.sign();
+//        return signedData;
+//    };
+//
+//    public byte[] hash(byte[] data){
+//        //create message digest using a certain hash algorithm
+//        MessageDigest md = MessageDigest.getInstance(""); //TODO: decide hash algorithm?
+//        //use hash to hash the data
+//        md.update(data);
+//        //generate the hash of the data
+//        byte[] hash = md.digest();
+//        return hash;
+//
+//    };
+//
+//    public byte[] mac(byte[] data, AESKey key){                                                                              //mac code for sending data between card and terminal, using java.crypto.Mac object?
+//        //create mac object
+//        Mac mac = Mac.getInstance("SHA-1"); //TODO: algorithm for mac?
+//        //initialise the Mac object with the skey
+//        mac.init(key);
+//        //compute mac
+//        byte[] macResult = mac.doFinal(data);
+//        return macResult;
+//    };
+//
+//    public boolean verify(byte[] signedData, byte[] key){
+//        signature.init(key, Signature.MODE_VERIFY);
+//        signature.verify(signedData);
+//        return true;
+//    };
+//
+//    public byte[] encryptAES(byte[] data, AESKey key){
+//        Cipher cipher = Cipher.getInstance("AES/ECB/PKCS5Padding");
+//        cipher.init(Cipher.ENCRYPT_MODE, key);
+//        byte[] encryptedData = cipher.doFinal(data);
+//        return encryptedData;
+//    }
+//
+//    public byte[] decryptAES(byte[] encryptedMessage, AESKey key){
+//        Cipher cipher = Cipher.getInstance("AES/ECB/PKCS5PADDING");
+//        cipher.init(Cipher.DECRYPT_MODE, key);
+//        byte[] decryptedMessage = cipher.doFinal(encryptedMessage);
+//        return decryptedMessage;
+//    }
 
 
     //original terminal code starts here
@@ -452,9 +491,10 @@ public class TCons extends JPanel implements ActionListener {
         add(display, BorderLayout.NORTH);
         keypad = new JPanel(new GridLayout(5, 5));
         key("Read");
+        key("Personalise");
         key("Authenticate");
-        key(null);
-        key(null);
+        key("Quit");
+        key("Dispense");
         key("C");
         key("7");
         key("8");
@@ -472,7 +512,6 @@ public class TCons extends JPanel implements ActionListener {
         key("-");
         key("M+");
         key("0");
-        key(null);
         key(null);
         key("+");
         key("=");
@@ -582,7 +621,28 @@ public class TCons extends JPanel implements ActionListener {
                         setText(readCard());
                         break;
                     case 'A': // authenticate
-                        //setText(authenticate());
+                    //    setText(authenticate());
+                        break;
+                    case 'P':
+                    //    setText(personalise());
+                        break;
+                    case 'Q':
+                        System.exit(0);
+                        break;
+                    case 'D':
+                        setText(consumeQuota());
+                        break;
+                    case '0':
+                    case '1':
+                    case '2':
+                    case '3':
+                    case '4':
+                    case '5':
+                    case '6':
+                    case '7':
+                    case '8':
+                    case '9':
+                    //    setText(); //print value on screen and pass character to another method to use it elsewhere?
                         break;
                     default:
                         setText(sendKey((byte) c));
