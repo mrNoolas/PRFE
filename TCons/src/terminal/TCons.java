@@ -197,7 +197,7 @@ public class TCons extends JPanel implements ActionListener {
 
 //    public byte[] getCardID(byte[] data){
 //        byte[] cardID = new byte[4];
-//        Util.arrayCopy(data, (short) 0, cardID, (short) 0, (short) 4);
+//        Util.arraycopy(data, (short) 0, cardID, (short) 0, (short) 4);
 //        return cardID;
 //    }
 
@@ -220,14 +220,14 @@ public class TCons extends JPanel implements ActionListener {
         byte[] skeyTPriv = keyExchangeKP.getPrivate().getEncoded();
 
         byte[] dataToSign = new byte[20];
-        Util.arrayCopy(tID, (short) 0, dataToSign, (short) 0, (short) 4);
+        Util.arraycopy(tID, (short) 0, dataToSign, (short) 0, (short) 4);
         Util.arraycopy(skeyT, (short) 0, dataToSign, (short) 4, (short) 16);
         byte[] signedData = sign(dataToSign);
 
         byte[] message = new byte[20 + signedData.length];
-        Util.arrayCopy(tID, (short) 0, message, (short) 0, (short) 4);
-        Util.arrayCopy(skeyT, (short) 0, message, (short) 4, (short) AES_KEY_LENGTH);
-        Util.arrayCopy(signedData, (short) 0, message, (short) 20, (short) signedData.length);
+        Util.arraycopy(tID, (short) 0, message, (short) 0, (short) 4);
+        Util.arraycopy(skeyT, (short) 0, message, (short) 4, (short) AES_KEY_LENGTH);
+        Util.arraycopy(signedData, (short) 0, message, (short) 20, (short) signedData.length);
 
         //construct apdu with AUTH_INS and message as data
         CommandAPDU authenticateCommand = new CommandAPDU((byte) PRFE_CLA, (byte)AUTH_INS, (byte)TERMINAL_TYPE,
@@ -278,30 +278,29 @@ public class TCons extends JPanel implements ActionListener {
         signature.sign(nonceT, (short) 0, (short) 8, sigBuffer, (short) 0);
         CommandAPDU consumeCommand = new CommandAPDU(PRFE_CLA, CONS_INS, T_TYPE, T_SOFT_VERSION, sigBuffer);
 
-        ResponseAPDU response;
+        ResponseAPDU response = null;
         try {
             //card sends back apdu with the data after transmitting the commandAPDU to the card
             response = applet.transmit(readCommand);
         } catch (CardException e) {
             // TODO: do something with the exception
             System.out.println(e);
-            return 0;
         }
 
         //verify response
         byte[] data = response.getData();
         //data = card-id, quota, signedData
         byte[] cardID = new byte[4];
-        Util.arrayCopy(data, 0, 4, cardID, 0, 4);
+        Util.arraycopy(data, 0, 4, cardID, 0, 4);
         short petrolQuotaOnCard = Util.getShort(data, (short) 4);
         byte[] nonceC = incNonce(nonceT); //sequence nr + 1
 
-        System.arrayCopy(cardID, 0, sigBuffer, 0, 4);
+        System.arraycopy(cardID, 0, sigBuffer, 0, 4);
         Util.setShort(sigBuffer, (short) 4, petrolQuotaOnCard);
-        System.arrayCopy(nonceC, 0, sigBuffer, 6, NONCET_LENGTH);
+        System.arraycopy(nonceC, 0, sigBuffer, 6, NONCET_LENGTH);
 
         signature.init(skey, Signature.MODE_VERIFY);
-        if (!signature.verify(sigBuffer, 0, 14, data, 6, SIGN_LENGTH)) {
+        if (!signature.verify(sigBuffer, (short) 0, 14, data, 6, SIGN_LENGTH)) {
             throw new Exception("Signature invalid");
 
         }
@@ -318,21 +317,19 @@ public class TCons extends JPanel implements ActionListener {
         //if quota on card - amount < 0 : exit
         short wantedPetrol = petrolQuotaOnCard - (short) amount;
         nonceT = incNonce(nonceC); //sequence nr + 2
-        byte[] dataBuffer = new byte[14]
-        System.arrayCopy(cardID, 0, dataBuffer, 0, 4);
-        Util.setShort(dataBuffer, 4, wantedPetrol);
-        System.arrayCopy(nonceT, 0, dataBuffer, 6, NONCET_LENGTH);
+        byte[] dataBuffer = new byte[14];
+        System.arraycopy(cardID, 0, dataBuffer, 0, 4);
+        Util.setShort(dataBuffer, (short) 4, wantedPetrol);
+        System.arraycopy(nonceT, 0, dataBuffer, 6, NONCET_LENGTH);
         signature.init(skey, Signature.MODE_SIGN);
         signature.update(dataBuffer);
         byte[] signedData = signature.sign();
-        System.arrayCopy(signedData, 0, sigBuffer, 6, SIGN_LENGTH);
+        System.arraycopy(signedData, 0, sigBuffer, 6, SIGN_LENGTH);
         CommandAPDU cons2Command = new CommandAPDU((int) PRFE_CLA, (int) CHAR_INS, (int) TERMINAL_TYPE, (int)TERMINAL_SOFTWARE_VERSION, sigBuffer);
-
         try {
-            ResponseAPDU response = applet.transmit(cons2Command);
+            response = applet.transmit(cons2Command);
         } catch (CardException e) {
             System.out.println(e);
-            return 0;
         }
         nonceC = incNonce(nonceT); //sequence nr + 3
         nonceT = incNonce(nonceC); //sequence nr + 4
@@ -343,25 +340,24 @@ public class TCons extends JPanel implements ActionListener {
 
                 short updatedQuota = wantedPetrol - getGasUsed();
 
-                System.arrayCopy(cardID, 0, dataBuffer, 0, 4);
-                Util.setShort(dataBuffer, 4,  updatedQuota);
-                System.arrayCopy(nonceT, 0, dataBuffer, 6, NONCET_LENGTH);
+                System.arraycopy(cardID, 0, dataBuffer, 0, 4);
+                Util.setShort(dataBuffer, (short) 4,  updatedQuota);
+                System.arraycopy(nonceT, 0, dataBuffer, 6, NONCET_LENGTH);
 
                 signature.init(skey, Signature.MODE_SIGN);
                 signature.update(dataBuffer);
                 signedData = signature.sign();
 
-                System.arrayCopy(cardID, 0, sigBuffer, 0, 4);
-                Util.setShort(sigBuffer, 4, updatedQuota);
-                System.arrayCopy(signedData, 0, sigBuffer, 6, SIGN_LENGTH);
+                System.arraycopy(cardID, 0, sigBuffer, 0, 4);
+                Util.setShort(sigBuffer, (short) 4, updatedQuota);
+                System.arraycopy(signedData, 0, sigBuffer, 6, SIGN_LENGTH);
 
                 CommandAPDU cons3Command = new CommandAPDU((int) PRFE_CLA, (int) CHAR_INS, (int) TERMINAL_TYPE, (int)TERMINAL_SOFTWARE_VERSION, sigBuffer);
 
                 try {
-                    ResponseAPDU response = applet.transmit(cons3Command);
+                    response = applet.transmit(cons3Command);
                 } catch (CardException e) {
                     System.out.println(e);
-                    return 0;
                 }
             }
         }
@@ -387,7 +383,7 @@ public class TCons extends JPanel implements ActionListener {
 
     short getGasUsed(short maxGas, short amount){
         //TODO: implement method to update amount of gas used by buyer
-        for(i = 0, i < maxGas, i++){
+        for(int i = 0; i < maxGas; i++){
 
         }
 
