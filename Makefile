@@ -14,12 +14,15 @@ JCARDSIM=jcardsim-3.0.4-SNAPSHOT
 # way more than is probably needed
 JC_CLASSPATH=${JC_HOME}/lib/apdutool.jar:${JC_HOME}/lib/apduio.jar:${JC_HOME}/lib/converter.jar:${JC_HOME}/lib/jcwde.jar:${JC_HOME}/lib/scriptgen.jar:${JC_HOME}/lib/offcardverifier.jar:${JC_HOME}/lib/api.jar:${JC_HOME}/lib/installer.jar:${JC_HOME}/lib/capdump.jar:${JC_HOME}/samples/classes:${CLASSPATH}
 
-all: applet TManTerminal TCharTerminal TConsTerminal TMan TChar TCons
+all: applet TerminalSwitch PRFETerminal TManTerminal TCharTerminal TConsTerminal TermSim
 
+runTerminals: all run
+
+# ===== Card =====
 applet: CardApplet/bin/CardApplet.class
 
 CardApplet/bin/CardApplet.class: CardApplet/src/applet/CardApplet.java
-	javac -d CardApplet/bin -cp ${JC_CLASSPATH}:TMan/src CardApplet/src/applet/CardApplet.java
+	javac -d CardApplet/bin -cp ${JC_CLASSPATH}:Terminals/src CardApplet/src/applet/CardApplet.java
 
 CardQuickTest: CardApplet/bin/QuickTest.class
 
@@ -30,66 +33,47 @@ runCardQuickTest: CardQuickTest
 	java -cp util/jcardsim/${JCARDSIM}.jar:CardApplet/bin terminal.QuickTest
 
 
-# ===== TMan =====
-TMan: TMan/bin/terminal/QuickTest.class
+# ===== QuickTest =====
+TManQuicktest: Terminals/bin/terminal/QuickTest.class
 
-TMan/bin/terminal/QuickTest.class: TMan/src/terminal/QuickTest.java
-	javac -d TMan/bin -cp ${JC_HOME}:util/jcardsim/${JCARDSIM}.jar:CardApplet/bin TMan/src/terminal/QuickTest.java
+TMan/bin/terminal/QuickTest.class: Terminals/src/terminal/QuickTest.java
+	javac -d Terminals/bin -cp ${JC_HOME}:util/jcardsim/${JCARDSIM}.jar:CardApplet/bin Terminals/src/terminal/QuickTest.java
 
-runTMan:
-	# Sends some sample APDUs to the CardApplet
-	java -cp util/jcardsim/${JCARDSIM}.jar:TMan/bin:CardApplet/bin terminal.QuickTest
+runTManQuicktest:
+	# Sends some sample APDUs to the CalcApplet
+	java -cp util/jcardsim/${JCARDSIM}.jar:CalcTerminal/bin:Terminals/bin terminal.QuickTest
 
-TManTerminal: TMan/bin/terminal/TMan.class
+# ===== Terminals =====
+TMan: Terminals/bin/terminal/TMan.class
+TermSim: Terminals/bin/terminal/TermSim.class
+PRFETerminal: Terminals/bin/terminal/PRFETerminal.class
+TerminalSwitch: Terminals/bin/terminal/TerminalSwitch.class
+TManTerminal: Terminals/bin/terminal/TMan.class
+TCharTerminal: Terminals/bin/terminal/TChar.class
+TConsTerminal: Terminals/bin/terminal/TCons.class
 
-TMan/bin/terminal/TMan.class: TMan/src/terminal/TMan.java
-	javac -d TMan/bin -cp ${JC_HOME}:util/jcardsim/${JCARDSIM}.jar:CardApplet/bin:TMan/bin TMan/src/terminal/TMan.java
+Terminals/bin/terminal/TermSim.class: Terminals/src/terminal/TermSim.java
+	javac -d Terminals/bin -cp ${JC_HOME}:util/jcardsim/${JCARDSIM}.jar:CardApplet/bin:Terminals/bin Terminals/src/terminal/TermSim.java
 
-runTManTerminal:
+Terminals/bin/terminal/TerminalSwitch.class: Terminals/src/terminal/TerminalSwitch.java
+	javac -d Terminals/bin -cp ${JC_HOME}:util/jcardsim/${JCARDSIM}.jar:CardApplet/bin:Terminals/bin Terminals/src/terminal/TerminalSwitch.java
+
+Terminals/bin/terminal/PRFETerminal.class: Terminals/src/terminal/PRFETerminal.java
+	javac -d Terminals/bin -cp ${JC_HOME}:util/jcardsim/${JCARDSIM}.jar:CardApplet/bin:Terminals/bin Terminals/src/terminal/PRFETerminal.java
+
+Terminals/bin/terminal/TMan.class: Terminals/src/terminal/TMan.java
+	javac -d Terminals/bin -cp ${JC_HOME}:util/jcardsim/${JCARDSIM}.jar:CardApplet/bin:Terminals/bin Terminals/src/terminal/TMan.java
+
+Terminals/bin/terminal/TChar.class: Terminals/src/terminal/TChar.java
+	javac -d Terminals/bin -cp ${JC_HOME}:util/jcardsim/${JCARDSIM}.jar:CardApplet/bin:Terminals/bin Terminals/src/terminal/TChar.java
+
+Terminals/bin/terminal/TCons.class: Terminals/src/terminal/TCons.java
+	javac -d Terminals/bin -cp ${JC_HOME}:util/jcardsim/${JCARDSIM}.jar:CardApplet/bin:Terminals/bin Terminals/src/terminal/TCons.java
+
+run:
 	# Runs the GUI terminal
-	java -Djdk.sunec.disableNative=false -cp util/jcardsim/${JCARDSIM}.jar:TMan/bin:CardApplet/bin terminal.TMan
-
-
-# ===== TCons =====
-TCons: TCons/bin/terminal/QuickTest.class
-
-TCons/bin/terminal/QuickTest.class: TCons/src/terminal/QuickTest.java
-	javac -d TCons/bin -cp ${JC_HOME}:util/jcardsim/${JCARDSIM}.jar:CardApplet/bin TCons/src/terminal/QuickTest.java
-
-runTCons:
-	# Sends some sample APDUs to the CardApplet
-	java -cp util/jcardsim/${JCARDSIM}.jar:TCons/bin:CardApplet/bin terminal.QuickTest
-
-TConsTerminal: TCons/bin/terminal/TCons.class
-
-TCons/bin/terminal/TCons.class: TCons/src/terminal/TCons.java
-	javac -d TCons/bin -cp ${JC_HOME}:util/jcardsim/${JCARDSIM}.jar:CardApplet/bin:TCons/bin TCons/src/terminal/TCons.java
-
-runTConsTerminal:
-	# Runs the GUI terminal
-	java -cp util/jcardsim/${JCARDSIM}.jar:TCons/bin:CardApplet/bin terminal.TCons
-
-# ===== TChar =====
-TChar: TChar/bin/terminal/QuickTest.class
-
-TChar/bin/terminal/QuickTest.class: TChar/src/terminal/QuickTest.java
-	javac -d TChar/bin -cp ${JC_HOME}:util/jcardsim/${JCARDSIM}.jar:CardApplet/bin TChar/src/terminal/QuickTest.java
-
-runTChar:
-	# Sends some sample APDUs to the CardApplet
-	java -cp util/jcardsim/${JCARDSIM}.jar:TChar/bin:CardApplet/bin terminal.QuickTest
-
-TCharTerminal: TChar/bin/terminal/TChar.class
-
-TChar/bin/terminal/TChar.class: TChar/src/terminal/TChar.java
-	javac -d TChar/bin -cp ${JC_HOME}:util/jcardsim/${JCARDSIM}.jar:CardApplet/bin:TChar/bin TChar/src/terminal/TChar.java
-
-runTCharTerminal:
-	# Runs the GUI terminal
-	java -cp util/jcardsim/${JCARDSIM}.jar:TChar/bin:CardApplet/bin terminal.TChar
+	java -Djdk.sunec.disableNative=false -cp util/jcardsim/${JCARDSIM}.jar:Terminals/bin:CardApplet/bin terminal.TermSim
 
 clean:
 	rm -rf CardApplet/bin/*
-	rm -rf TMan/bin/*
-	rm -rf TChar/bin/*
-	rm -rf TCons/bin/*
+	rm -rf Terminals/bin/*
