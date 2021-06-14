@@ -75,6 +75,7 @@ public class TChar extends JPanel implements ActionListener {
 	private javacardx.crypto.Cipher AESCipher;
 
 	private byte[] TCert; // Terminal certificate
+	
 
 	//Length constants
 	private static final short ID_LENGTH = 4;
@@ -92,7 +93,7 @@ public class TChar extends JPanel implements ActionListener {
     private static final byte CHAR_INS = (byte) 0x20;
     private static final byte REV_INS  = (byte) 0x40;
 
-
+	private byte[] cardID;
 
     // Data about this terminal:
     private static final byte T_TYPE = (byte) 0x02;
@@ -146,6 +147,7 @@ public class TChar extends JPanel implements ActionListener {
 
 		tID = new byte[TID_LENGTH];
 		nonceT = new byte[NONCET_LENGTH];
+		byte[] cardID = new byte[4];
 		monthlyQuota = 1;
 
 
@@ -181,7 +183,7 @@ public class TChar extends JPanel implements ActionListener {
 				byte cardType = data[0];
 				byte cardSoftVers = data[1];
 
-				byte[] cardID = new byte[4];
+				
 				System.arraycopy(data, 2, cardID, 0, 4);
 
 				short petrolQuota = Util.getShort(data, (short) 6);
@@ -200,13 +202,13 @@ public class TChar extends JPanel implements ActionListener {
 	}
 
 
-	public void charge(CardApplet card) {
+	public void charge(CardApplet card) throws CardException, Exception{
 		byte[] sigBuffer = new byte[2*SIGN_LENGTH];
 
 		signature.init(skey, Signature.MODE_SIGN);
 		signature.sign(nonceT, (short) 0, (short) 8, sigBuffer, (short) 0);
 		CommandAPDU chargeCommand = new CommandAPDU((int) PRFE_CLA, (int) CHAR_INS, (int)TERMINAL_TYPE, (int)TERMINAL_SOFTWARE_VERSION, sigBuffer);
-		ResponseAPDU response;
+		ResponseAPDU response = null;
 		try {
 			response = applet.transmit(chargeCommand);
 		} catch (CardException e) {
@@ -214,7 +216,7 @@ public class TChar extends JPanel implements ActionListener {
 		}
 
 		byte[] data = response.getData();
-		byte[] cardID = new byte[4];
+		
 		System.arraycopy(data, 0, cardID, 0, 4);
 
 		short petrolQuota = Util.getShort(data, (short) 4);
@@ -227,7 +229,10 @@ public class TChar extends JPanel implements ActionListener {
 
 		signature.init(skey, Signature.MODE_VERIFY);
 		if (!signature.verify(sigBuffer, (short) 0, (short) 16, data, (short) 8, SIGN_LENGTH)) {
-			throw new Exception("Signature invalid");
+
+
+			// do something
+
 
 		}
 
@@ -262,24 +267,48 @@ public class TChar extends JPanel implements ActionListener {
 		sigBuffer[63] = (byte) ((tNum >> 8) & 0xff);
 
 		signature.init(skey, Signature.MODE_VERIFY);
+
 		if (!signature.verify(sigBuffer, (short) 0, (short) 64, data, (short) 0, SIGN_LENGTH)) {
-			throw new Exception("Signature invalid");
+
+			// do something
 		}
 
 		incNonce(nonceT);
 		if (!signature.verify(nonceT, (short) 0, (short) 8, data, SIGN_LENGTH, SIGN_LENGTH)) {
-			throw new Exception("Signature invalid");
+			// do something
 		}
+
 
 	}
 
 	private short getMonthlyQuota(byte[] cardID) {
-		return 1;
+		return (short) 1;
+	}
+
+
+	public void revoke(CardApplet card) {
+		byte[] sigBuffer = new byte[SIGN_LENGTH+NONCET_LENGTH];
+		sigBuffer[0] = REV_INS;
+		System.arraycopy(cardID, (short) 0, sigBuffer, (short) 1, (short) 4);
+		System.arraycopy(nonceT, (short) 0, sigBuffer, (short) 5, NONCET_LENGTH);
+		
+		signature.init(skey, Signature.MODE_SIGN);
+		signature.sign(sigBuffer, (short) 0, (short) 13, sigBuffer, (short) 0);
+		System.arraycopy(nonceT, (short) 0, sigBuffer, SIGN_LENGTH, NONCET_LENGTH);
+		CommandAPDU revokeCommand = new CommandAPDU((int) PRFE_CLA, (int) REV_INS, (int) TERMINAL_TYPE, (int) TERMINAL_SOFTWARE_VERSION, sigBuffer);
+		ResponseAPDU response;
+
+		try {
+			response = applet.transmit(revokeCommand);
+		} catch (CardException e) {
+			System.out.println(e);
+		}
+		
 	}
 
 	public byte[] hash(byte[] data) {
 		// Hash the message using hash function
-		byte[] hash;
+		byte[] hash = null;
 		MessageDigest md = MessageDigest.getInstance(MessageDigest.ALG_SHA, false);
 		md.doFinal(data, (short) 0, (short) data.length, hash, (short) 0);
 		md.reset();
@@ -293,7 +322,13 @@ public class TChar extends JPanel implements ActionListener {
 
 
 		CommandAPDU chargeCommand = new CommandAPDU((int)PRFE_CLA, (int) CHAR_INS, (int) TERMINAL_TYPE, (int) TERMINAL_SOFTWARE_VERSION);
-		ResponseAPDU response = applet.transmit(chargeCommand);
+		ResponseAPDU response = null;
+		try {
+			response = applet.transmit(chargeCommand);
+		} catch (CardException e) {
+			System.out.println(e);
+		}
+
 		byte[] responseBytes = response.getBytes();
 		byte[] data = response.getData();
 
@@ -301,7 +336,11 @@ public class TChar extends JPanel implements ActionListener {
 		short petrolCredit = data[(short) 0];
 		petrolCredit = (short) (petrolCredit + monthlyQuota);
 		chargeCommand = new CommandAPDU((int)PRFE_CLA, (int) CHAR_INS, (short) monthlyQuota, (int) 0);
-		response = applet.transmit(chargeCommand);
+		try {
+			response = applet.transmit(chargeCommand);
+		} catch (CardException e) {
+			System.out.println(e);
+		}
 
 
 

@@ -142,6 +142,14 @@ public class TMan extends JPanel implements ActionListener {
         signature = Signature.getInstance(Signature.ALG_ECDSA_SHA, false);
         random = RandomData.getInstance(RandomData.ALG_SECURE_RANDOM);
 
+        // generate all the keys:
+        TMan.genKeyPair(); 
+        TChar.genKeyPair(); 
+        TCons.genKeyPair(); 
+        Server.genKeyPair(); 
+        Card.genKeyPair(); 
+        ReCard.genKeyPair(); 
+
         //simulatorInterface = new JavaxSmartCardInterface(); // SIM
         buildGUI(parent);
         setEnabled(false);
@@ -323,6 +331,22 @@ public class TMan extends JPanel implements ActionListener {
             System.exit(0);
         }
     }
+
+    /**
+     * Increment nonce with 1
+     */
+    private void incNonce (byte[] nonce) {
+        for (short i = (short) 7; i >= (short) 0; i--) {
+            if (nonce[i] == 0xff) {
+                nonce[i] = (byte) 0x00;
+                // Continue looping to process carry
+            } else {
+                nonce[i] = (byte) (((short) (nonce[i] & 0xff) + 1) & 0xff); // increment byte with 1, unsigned
+                break; // no carry so quit
+            }
+        }
+        // Any remaining carry is just ignored.
+    }
     
     public int readCard() {                                                 //default method, read information on card
         resetTerminal();
@@ -386,11 +410,11 @@ public class TMan extends JPanel implements ActionListener {
             response = applet.transmit(command);
         } catch (CardException e) {
             // TODO: do something with the exception
+            resetTerminal();
 
             System.out.println(e);
             return "Transmit Error";
         }
-
 
         /* 
          * process the response apdu
@@ -404,8 +428,13 @@ public class TMan extends JPanel implements ActionListener {
          *  4 bytes CCertExp
          *  56 bytes card message signature
          */
-        
-        byte[] data = response.getData(); 
+        byte[] data = response.getBytes();
+        if (data[0] == 0x62 && data[1] == 0) {
+            System.out.println("Warning, terminal already authenticated");
+            return "Warning, terminal already authenticated";
+        }
+
+        data = response.getData(); 
         ECExch.init(keyExchangeKP.getPrivate());
         byte[] keyExchBuffer = new byte[20];
         ECExch.generateSecret(data, (short) 0, (short) 33, keyExchBuffer, (short) 0);
@@ -420,6 +449,7 @@ public class TMan extends JPanel implements ActionListener {
         signature.init(Card.getPublic(), Signature.MODE_VERIFY);
 
         if (!signature.verify(data, (short) 0, (short) 105, data, (short) 105, (short) 56)) {
+            resetTerminal();
             return "Auth failed, return sig invalid";
         }
 
@@ -432,6 +462,7 @@ public class TMan extends JPanel implements ActionListener {
         System.arraycopy(data, 101, CCert, 5, 4);
 
         if (!signature.verify(CCert, (short) 0, (short) 9, data, (short) 45, (short) 56)) {
+            resetTerminal();
             return "Auth failed, CCert invalid";
         }
 
@@ -442,10 +473,82 @@ public class TMan extends JPanel implements ActionListener {
         
         // ================== Authentication Phase 2
         // Move forward with authenticating Terminal to card
-        buffer = new byte[136];
-        
-        return "Authentication Successful";
+        buffer = new byte[144];
 
+        System.arraycopy(T_ID, 0, buffer, 0, 4);
+
+        // First generate random 8 byte nonce
+        nonceT = new byte[8];
+        SecureRandom random = new SecureRandom();
+        random.nextBytes(nonceT);
+
+        System.arraycopy(nonceT, 0, buffer, 4, 8);  
+
+        // Then increment the card nonce
+        incNonce(nonceC);
+        System.arraycopy(nonceC, 0, buffer, 12, 8);
+
+        // TODO: get from server, permanently store, and then retrieve TCert from storage here
+        // Generate TCert & expiry date
+        byte[] TCertExp = new byte[] {(byte) 0x07, (byte) 0xe5, (byte) 0x0c, (byte) 0x1f};
+
+        signature.init(Server.getPrivate(), Signature.MODE_SIGN);
+        signature.update(T_ID, (short) 0, (short) 4);
+        signature.update(new byte[] {T_TYPE}, (short) 0, (short) 1); // Type TMan
+        signature.sign(TCertExp, (short) 0, (short) 4, buffer, (short) 20); // outputs 54, 55 or 56 bytes of signature data
+        System.arraycopy(TCertExp, 0, buffer, 76, 4);
+
+        // sign message
+        signature.init(TMan.getPrivate(), Signature.MODE_SIGN);
+        signature.update(new byte[] {T_TYPE, T_SOFT_VERSION}, (short) 0, (short) 2);
+        signature.sign(buffer, (short) 0, (short) 80, buffer, (short) 80);
+
+        /*
+         * For some reason AES does not want to encrypt 17 (or 19) blocks, 
+         * so we add a block of 0's to the end... We do not know why :(
+         */
+        // encrypt message
+        AESCipher.init(skey, Cipher.MODE_ENCRYPT);
+        AESCipher.doFinal(buffer, (short) 0, (short) 144, buffer, (short) 0);
+
+        // and send it
+        CommandAPDU command2 = new CommandAPDU(PRFE_CLA, AUTH_INS, T_TYPE, T_SOFT_VERSION, buffer, 0, 144, 16);
+
+        try {
+            //card sends back apdu with the data after transmitting the commandAPDU to the card
+            response = applet.transmit(command2);
+        } catch (CardException e) {
+            // TODO: do something with the exception
+            resetTerminal();
+
+            System.out.println(e);
+            return "Transmit Error";
+        }
+
+
+        /* 
+         * process the response apdu
+         *
+         * data:
+         *  8 bytes nonceT
+         */ 
+        data = response.getData(); 
+        AESCipher.init(skey, Cipher.MODE_DECRYPT);
+        AESCipher.doFinal(data, (short) 0, (short) 16, data, (short) 0);
+
+        if (!Arrays.equals(data, 0, 8, nonceC, 0, 8)) {
+            resetTerminal();
+            return "NonceC returned incorrectly, authentication unsuccesful";
+        }
+
+        incNonce(nonceT);
+        if (!Arrays.equals(data, 8, 16, nonceT, 0, 8)) {
+            resetTerminal();
+            return "NonceT returned incorrectly, authentication unsuccesful";
+        }
+        
+        System.out.println("Authentication Successful");
+        return "Authentication Successful";
     }
 
     public String personalise () {
@@ -457,14 +560,8 @@ public class TMan extends JPanel implements ActionListener {
          * we do not do appropriate key management in this example. 
          * For personalisation the keys are simply generated, and the card is only persistently usable for a single run of the simulator.
          * In reality, the keypairs are the same for all devices of the same category.
+         * 
          */
-        // first generate all the keys:
-        TMan.genKeyPair(); 
-        TChar.genKeyPair(); 
-        TCons.genKeyPair(); 
-        Server.genKeyPair(); 
-        Card.genKeyPair(); 
-        ReCard.genKeyPair(); 
 
         // Then add them to buffers:
         ((ECPublicKey) TMan.getPublic()).getW(buffer0, (short) 0);
