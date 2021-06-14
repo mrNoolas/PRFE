@@ -61,6 +61,9 @@ import terminal.PRFETerminal;
 public class TChar extends PRFETerminal {
     private static final byte PERS_INS = (byte) 0x50;
 
+    static final Dimension PREFERRED_SIZE = new Dimension(900, 300);
+    static final int DISPLAY_WIDTH = 60;
+
     public TChar(JFrame parent, KeyPair TManKP, KeyPair TCharKP, KeyPair TConsKP,
                 KeyPair ServerKP, KeyPair CardKP, KeyPair ReCardKP) {
         super();
@@ -91,32 +94,26 @@ public class TChar extends PRFETerminal {
         display.setBackground(Color.darkGray);
         display.setForeground(Color.green);
         add(display, BorderLayout.NORTH);
-        keypad = new JPanel(new GridLayout(5, 5));
+        keypad = new JPanel(new GridLayout(5, 3));
         key("Read");
-        key("Personalise");
+        key("Charge");
         key("Authenticate");
-        key("Quit");
-        key("Switch");
+
         key("7");
         key("8");
         key("9");
-        key(":");
-        key("ST");
+
         key("4");
         key("5");
         key("6");
-        key("x");
-        key("RM");
+
         key("1");
         key("2");
         key("3");
-        key("-");
-        key("M+");
+
+        key("Quit");
         key("0");
-        key(null);
-        key(null);
-        key("+");
-        key("=");
+        key("Switch");
         add(keypad, BorderLayout.CENTER);
     }
 
@@ -124,24 +121,25 @@ public class TChar extends PRFETerminal {
         try {
             Object src = ae.getSource();
             if (src instanceof JButton) {
-                char c = ((JButton) src).getText().charAt(0);
+                String s = ((JButton) src).getText();
 
-                switch(c) {
-                    case 'R': // read
+                switch(s) {
+                    case "Read": // read
+                    case "Reset":
                         setText(readCard(T_TYPE, T_SOFT_VERSION, T_ID));
                         break;
-                    case 'A': // authenticate
+                    case "Authenticate": // authenticate
                         setText(authenticate(T_TYPE, T_SOFT_VERSION, T_ID));
                         break;
-                    case 'P':
-                        setText(personalise());
-                        break;
-                    case 'Q':
+                    case "Quit":
                         System.exit(0);
                         break;
-                    case 'S':
+                    case "Switch":
                         switchCallback.switchTerminal(T_TYPE);
                         break;
+                    case "Charge":
+                    case "Revoke":
+                    case "Rekey":
                     default:
                         setText("nop"); //sendKey((byte) c));
                         break;
@@ -152,116 +150,6 @@ public class TChar extends PRFETerminal {
             System.out.println(MSG_ERROR);
         }
     }
-
-    public String personalise () {
-        byte[] buffer0 = new byte[228];
-        byte[] buffer1 = new byte[172];
-
-        /**
-         * TODO: put this in report:
-         * we do not do appropriate key management in this example. 
-         * For personalisation the keys are simply generated, and the card is only persistently usable for a single run of the simulator.
-         * In reality, the keypairs are the same for all devices of the same category.
-         * 
-         */
-
-        // Then add them to buffers:
-        ((ECPublicKey) TMan.getPublic()).getW(buffer0, (short) 0);
-        ((ECPublicKey) TChar.getPublic()).getW(buffer0, (short) 51);
-        ((ECPublicKey) TCons.getPublic()).getW(buffer0, (short) 102);
-        ((ECPublicKey) Card.getPublic()).getW(buffer0, (short) 153);
-        ((ECPrivateKey) Card.getPrivate()).getS(buffer0, (short) 204);
-
-        ((ECPublicKey) ReCard.getPublic()).getW(buffer1, (short) 0);
-        ((ECPublicKey) Server.getPublic()).getW(buffer1, (short) 51);
-
-        // generate cardID // TODO: put in the report that we now use a fixed cardID for easier testing, but that this could just as well be dynamic
-        byte[] cardID = new byte[] {(byte) 0xde, (byte) 0xad, (byte) 0xbe, (byte) 0xef};
-
-        // generate CCert
-        signature.init(Server.getPrivate(), Signature.MODE_SIGN);
-        signature.update(cardID, (short) 0, (short) 4);
-        signature.update(new byte[] {0x00}, (short) 0, (short) 1);
-        signature.sign(CCertExp, (short) 0, (short) 4, buffer1, (short) 102); // outputs 54, 55 or 56 bytes of signature data
-
-        System.arraycopy(CCertExp, 0, buffer1, 158, 4);
-        System.arraycopy(cardID, 0, buffer1, 162, 4);
-        
-        // Generate random 6 digit pin using SecureRandom
-        byte[] pin = new byte[6];
-        SecureRandom random = new SecureRandom();
-        int pinInt = random.nextInt(1000000);
-        
-        pin[0] = (byte) (pinInt - (pinInt % 100000));
-        pin[1] = (byte) ((pinInt % 100000) - (pinInt % 10000));
-        pin[2] = (byte) ((pinInt % 10000) - (pinInt % 1000));
-        pin[3] = (byte) ((pinInt % 1000) - (pinInt % 100));
-        pin[4] = (byte) ((pinInt % 100) - (pinInt % 10));
-        pin[5] = (byte) (pinInt % 10);
-        System.arraycopy(pin, 0, buffer1, 166, 6);
-        
-
-        ResponseAPDU response;
-        CommandAPDU readCommand = new CommandAPDU(PRFE_CLA, PERS_INS, (byte) 1, T_SOFT_VERSION, buffer0, 0, 228, 228);
-        try {
-            //card sends back apdu with the data after transmitting the commandAPDU to the card
-            response = applet.transmit(readCommand);
-        } catch (CardException e) {
-            // TODO: do something with the exception
-            System.out.println(e);
-            return "ERROR: cardException";
-        }
-        // Check that the response is the same as what was sent:
-        byte[] data = response.getBytes(); 
-        if (data[0] == 0x62 && data[1] == 0) {
-            return "Warning: Card not manageable!";
-        }
-        data = response.getData();
-        byte[] dataTrunc = Arrays.copyOfRange(data, 0, 228);
-        if (!Arrays.equals(buffer0, dataTrunc)) {
-            for (int i = 0; i < 172; i++) {
-                if (buffer0[i] != dataTrunc[i]) {
-                    System.out.printf("%d %x %x \n", i, buffer0[i], dataTrunc[i]);
-                }
-            }
-            return "ERROR: Card readback 0 incorrect!";
-        }
-
-        readCommand = new CommandAPDU(PRFE_CLA, PERS_INS, (byte) 0b00000011, T_SOFT_VERSION, buffer1, 0, 172, 172);
-        try {
-            //card sends back apdu with the data after transmitting the commandAPDU to the card
-            response = applet.transmit(readCommand);
-        } catch (CardException e) {
-            // TODO: do something with the exception
-            System.out.println(e);
-            return "ERROR: cardException";
-        }
-        // Check that the response is the same as what was sent:
-        data = response.getData(); 
-        byte[] dataTrunc1 = Arrays.copyOfRange(data, 0, 172);
-        if (!Arrays.equals(buffer1, dataTrunc1)) {
-            /*for (int i = 0; i < 172; i++) {
-                if (buffer1[i] != dataTrunc1[i]) {
-                    System.out.printf("%d %x %x \n", i, buffer1[i], dataTrunc1[i]);
-                }
-            }*/
-            return "ERROR: Card readback 1 incorrect!";
-        }
-
-        System.out.println("Disabling personalisation...");
-        // Disable personalise
-        readCommand = new CommandAPDU(PRFE_CLA, PERS_INS, (byte) 0b00000100, T_SOFT_VERSION);
-        try {
-            //card sends back apdu with the data after transmitting the commandAPDU to the card
-            response = applet.transmit(readCommand);
-        } catch (CardException e) {
-            // TODO: do something with the exception
-            System.out.println(e);
-            return "ERROR: cardException";
-        }
-        return "Personalisation success!";
-    }
-
 
     public Dimension getPreferredSize() {
         return PREFERRED_SIZE;

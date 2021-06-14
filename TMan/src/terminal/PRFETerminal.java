@@ -53,9 +53,6 @@ public abstract class PRFETerminal extends JPanel implements ActionListener {
 
     private static final long serialVersionUID = 1L;
     static final Font FONT = new Font("Monospaced", Font.BOLD, 24);
-    static final Dimension PREFERRED_SIZE = new Dimension(900, 300);
-
-    static final int DISPLAY_WIDTH = 60;
     static final String MSG_ERROR = "    -- error --     ";
     static final String MSG_DISABLED = " -- insert card --  ";
     static final String MSG_INVALID = " -- invalid card -- ";
@@ -139,12 +136,8 @@ public abstract class PRFETerminal extends JPanel implements ActionListener {
         for (int i = 0; i < keys.length; i++) {
             keys[i].setEnabled(b);
 
-            if (keys[i] instanceof JButton) {
-                char c = ((JButton) keys[i]).getText().charAt(0);
-
-                if (c == 'S') {
-                    keys[i].setEnabled(true); // enable switch key
-                }
+            if (keys[i] instanceof JButton && ((JButton) keys[i]).getText() == "Switch") {
+                keys[i].setEnabled(!b); // enable switch key
             }
         }
     }
@@ -178,19 +171,6 @@ public abstract class PRFETerminal extends JPanel implements ActionListener {
             setText(MSG_ERROR);
         } else {
             setText((short) (((data[3] & 0x000000FF) << 8) | (data[4] & 0x000000FF)));
-            setMemory(data[0] == 0x01);
-        }
-    }
-
-    void setMemory(boolean b) {
-        String txt = getText();
-        int l = txt.length();
-        if (l < DISPLAY_WIDTH) {
-            for (int i = 0; i < (DISPLAY_WIDTH - l); i++) {
-                txt = " " + txt;
-            }
-            txt = (b ? "M" : " ") + txt;
-            setText(txt);
         }
     }
 
@@ -442,7 +422,5 @@ public abstract class PRFETerminal extends JPanel implements ActionListener {
         return "Authentication Successful";
     }
 
-    public Dimension getPreferredSize() {
-        return PREFERRED_SIZE;
-    }
+    public abstract Dimension getPreferredSize();
 }

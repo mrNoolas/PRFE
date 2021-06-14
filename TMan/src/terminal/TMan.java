@@ -61,6 +61,9 @@ import terminal.PRFETerminal;
 public class TMan extends PRFETerminal {
     private static final byte PERS_INS = (byte) 0x50;
 
+    static final Dimension PREFERRED_SIZE = new Dimension(900, 150);
+    static final int DISPLAY_WIDTH = 60;
+
     public TMan(JFrame parent, KeyPair TManKP, KeyPair TCharKP, KeyPair TConsKP,
                 KeyPair ServerKP, KeyPair CardKP, KeyPair ReCardKP) {
         super();
@@ -91,32 +94,15 @@ public class TMan extends PRFETerminal {
         display.setBackground(Color.darkGray);
         display.setForeground(Color.green);
         add(display, BorderLayout.NORTH);
-        keypad = new JPanel(new GridLayout(5, 5));
+        keypad = new JPanel(new GridLayout(2, 4));
         key("Read");
         key("Personalise");
         key("Authenticate");
         key("Quit");
         key("Switch");
-        key("7");
-        key("8");
-        key("9");
-        key(":");
-        key("ST");
-        key("4");
-        key("5");
-        key("6");
-        key("x");
-        key("RM");
-        key("1");
-        key("2");
-        key("3");
-        key("-");
-        key("M+");
-        key("0");
-        key(null);
-        key(null);
-        key("+");
-        key("=");
+        key("Revoke");
+        key("Rekey");
+        key("Reset");
         add(keypad, BorderLayout.CENTER);
     }
 
@@ -124,24 +110,27 @@ public class TMan extends PRFETerminal {
         try {
             Object src = ae.getSource();
             if (src instanceof JButton) {
-                char c = ((JButton) src).getText().charAt(0);
+                String s = ((JButton) src).getText();
 
-                switch(c) {
-                    case 'R': // read
+                switch(s) {
+                    case "Read": // read
+                    case "Reset":
                         setText(readCard(T_TYPE, T_SOFT_VERSION, T_ID));
                         break;
-                    case 'A': // authenticate
+                    case "Authenticate": // authenticate
                         setText(authenticate(T_TYPE, T_SOFT_VERSION, T_ID));
                         break;
-                    case 'P':
+                    case "Personalise":
                         setText(personalise());
                         break;
-                    case 'Q':
+                    case "Quit":
                         System.exit(0);
                         break;
-                    case 'S':
+                    case "Switch":
                         switchCallback.switchTerminal(T_TYPE);
                         break;
+                    case "Revoke":
+                    case "Rekey":
                     default:
                         setText("nop"); //sendKey((byte) c));
                         break;

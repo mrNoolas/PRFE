@@ -227,17 +227,16 @@ public void process(APDU apdu) throws ISOException, APDUException {
 
         read(apdu, buffer);
         break;
-    case 0x10:
+    case 0x10: // AUTHENTICATE
         if (!checkAndCopyTypeAndVersion(buffer)) {
             // reset status:
             select();
-
             ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
         } else {
             authenticate(apdu, buffer);
         }
         break;
-    case 0x20:
+    case 0x20: // CHARGE
 
 		if (!checkAndCopyTypeAndVersion(buffer)) {
             // reset status:
