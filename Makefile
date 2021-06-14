@@ -14,8 +14,11 @@ JCARDSIM=jcardsim-3.0.4-SNAPSHOT
 # way more than is probably needed
 JC_CLASSPATH=${JC_HOME}/lib/apdutool.jar:${JC_HOME}/lib/apduio.jar:${JC_HOME}/lib/converter.jar:${JC_HOME}/lib/jcwde.jar:${JC_HOME}/lib/scriptgen.jar:${JC_HOME}/lib/offcardverifier.jar:${JC_HOME}/lib/api.jar:${JC_HOME}/lib/installer.jar:${JC_HOME}/lib/capdump.jar:${JC_HOME}/samples/classes:${CLASSPATH}
 
-all: applet PRFETerminal TermSim TManTerminal TCharTerminal TermSim runTerminals #TCharTerminal TConsTerminal TMan TChar TCons
+all: applet TerminalSwitch PRFETerminal TManTerminal TCharTerminal TConsTerminal TermSim
 
+runTerminals: all run
+
+# ===== Card =====
 applet: CardApplet/bin/CardApplet.class
 
 CardApplet/bin/CardApplet.class: CardApplet/src/applet/CardApplet.java
@@ -30,7 +33,7 @@ runCardQuickTest: CardQuickTest
 	java -cp util/jcardsim/${JCARDSIM}.jar:CardApplet/bin terminal.QuickTest
 
 
-# ===== TMan =====
+# ===== QuickTest =====
 TManQuicktest: TMan/bin/terminal/QuickTest.class
 
 TMan/bin/terminal/QuickTest.class: TMan/src/terminal/QuickTest.java
@@ -40,34 +43,36 @@ runTManQuicktest:
 	# Sends some sample APDUs to the CalcApplet
 	java -cp util/jcardsim/${JCARDSIM}.jar:CalcTerminal/bin:TMan/bin terminal.QuickTest
 
+# ===== Terminals =====
 TMan: TMan/bin/terminal/TMan.class
-
 TermSim: TMan/bin/terminal/TermSim.class
+PRFETerminal: TMan/bin/terminal/PRFETerminal.class
+TerminalSwitch: TMan/bin/terminal/TerminalSwitch.class
+TManTerminal: TMan/bin/terminal/TMan.class
+TCharTerminal: TMan/bin/terminal/TChar.class
+TConsTerminal: TMan/bin/terminal/TCons.class
 
 TMan/bin/terminal/TermSim.class: TMan/src/terminal/TermSim.java
 	javac -d TMan/bin -cp ${JC_HOME}:util/jcardsim/${JCARDSIM}.jar:CardApplet/bin:TMan/bin TMan/src/terminal/TermSim.java
 
-PRFETerminal: TMan/bin/terminal/PRFETerminal.class
+TMan/bin/terminal/TerminalSwitch.class: TMan/src/terminal/TerminalSwitch.java
+	javac -d TMan/bin -cp ${JC_HOME}:util/jcardsim/${JCARDSIM}.jar:CardApplet/bin:TMan/bin TMan/src/terminal/TerminalSwitch.java
 
 TMan/bin/terminal/PRFETerminal.class: TMan/src/terminal/PRFETerminal.java
 	javac -d TMan/bin -cp ${JC_HOME}:util/jcardsim/${JCARDSIM}.jar:CardApplet/bin:TMan/bin TMan/src/terminal/PRFETerminal.java
 
-TManTerminal: TMan/bin/terminal/TMan.class
-
 TMan/bin/terminal/TMan.class: TMan/src/terminal/TMan.java
 	javac -d TMan/bin -cp ${JC_HOME}:util/jcardsim/${JCARDSIM}.jar:CardApplet/bin:TMan/bin TMan/src/terminal/TMan.java
-
-TCharTerminal: TMan/bin/terminal/TChar.class
 
 TMan/bin/terminal/TChar.class: TMan/src/terminal/TChar.java
 	javac -d TMan/bin -cp ${JC_HOME}:util/jcardsim/${JCARDSIM}.jar:CardApplet/bin:TMan/bin TMan/src/terminal/TChar.java
 
-runTerminals:
+TMan/bin/terminal/TCons.class: TMan/src/terminal/TCons.java
+	javac -d TMan/bin -cp ${JC_HOME}:util/jcardsim/${JCARDSIM}.jar:CardApplet/bin:TMan/bin TMan/src/terminal/TCons.java
+
+run:
 	# Runs the GUI terminal
 	java -Djdk.sunec.disableNative=false -cp util/jcardsim/${JCARDSIM}.jar:TMan/bin:CardApplet/bin terminal.TermSim
-
-
-
 
 clean:
 	rm -rf CardApplet/bin/*

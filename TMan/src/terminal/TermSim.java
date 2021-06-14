@@ -59,7 +59,7 @@ public class TermSim {
     static final String TITLE = "Terminal";
 
     private TMan tMan;
-    private TMan tCons; //TODO: change type
+    private TCons tCons;
     private TChar tChar;
 
     private KeyPair TManKP;
@@ -85,9 +85,9 @@ public class TermSim {
         CardKP.genKeyPair();
         ReCardKP.genKeyPair();
 
-        // Setup Terminals
+        // Setup Terminals TODO: reduce the keys that are given to each terminal
         tMan = new TMan(tManParent, TManKP, TCharKP, TConsKP, ServerKP, CardKP, ReCardKP);
-        tCons = new TMan(tConsParent, TManKP, TCharKP, TConsKP, ServerKP, CardKP, ReCardKP);
+        tCons = new TCons(tConsParent, TManKP, TCharKP, TConsKP, ServerKP, CardKP, ReCardKP);
         tChar = new TChar(tConsParent, TManKP, TCharKP, TConsKP, ServerKP, CardKP, ReCardKP);
 
         tManParent.addWindowListener(new CloseEventListener());
@@ -104,7 +104,7 @@ public class TermSim {
     private TMan getTMan() {
         return tMan;
     }
-    private TMan getTCons() {
+    private TCons getTCons() {
         return tCons;
     }
 
@@ -112,7 +112,7 @@ public class TermSim {
         return tChar;
     }
 
-    class SimulatedCardThread extends Thread {
+    class SimulatedCardThread extends Thread implements TerminalSwitch {
         CardTerminal TMAN, TCONS, TCHAR;
         CardSimulator simulator;
 
@@ -214,7 +214,7 @@ public class TermSim {
 
         TMan tManPane = sim.getTMan();
         tManC.add(tManPane);
-        TMan tConsPane = sim.getTCons();
+        TCons tConsPane = sim.getTCons();
         tConsC.add(tConsPane);
         TChar tCharPane = sim.getTChar();
         tCharC.add(tCharPane);

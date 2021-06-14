@@ -45,7 +45,7 @@ import com.licel.jcardsim.smartcardio.CardTerminalSimulator;
 import com.licel.jcardsim.smartcardio.CardSimulator;
 
 import applet.CardApplet;
-import terminal.TermSim.*;
+import terminal.TerminalSwitch;
 
 public abstract class PRFETerminal extends JPanel implements ActionListener {
 
@@ -105,7 +105,7 @@ public abstract class PRFETerminal extends JPanel implements ActionListener {
     protected byte[] nonceC;
     protected byte[] nonceT;
 
-    public SimulatedCardThread switchCallback;
+    public TerminalSwitch switchCallback;
 
     protected PRFETerminal() {
         skey = (AESKey) KeyBuilder.buildKey(KeyBuilder.TYPE_AES_TRANSIENT_DESELECT, KeyBuilder.LENGTH_AES_128, true);

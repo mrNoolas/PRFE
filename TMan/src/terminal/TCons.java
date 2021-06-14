@@ -47,13 +47,13 @@ import com.licel.jcardsim.smartcardio.CardSimulator;
 import applet.CardApplet;
 import terminal.PRFETerminal;
 
-public class TChar extends PRFETerminal {
+public class TCons extends PRFETerminal {
     private static final byte PERS_INS = (byte) 0x50;
 
     static final Dimension PREFERRED_SIZE = new Dimension(900, 300);
     static final int DISPLAY_WIDTH = 60;
 
-    public TChar(JFrame parent, KeyPair TManKP, KeyPair TCharKP, KeyPair TConsKP,
+    public TCons(JFrame parent, KeyPair TManKP, KeyPair TCharKP, KeyPair TConsKP,
                 KeyPair ServerKP, KeyPair CardKP, KeyPair ReCardKP) {
         super();
 
@@ -64,9 +64,9 @@ public class TChar extends PRFETerminal {
         Card = CardKP;
         ReCard = ReCardKP;
 
-        T_TYPE = (byte) 0x02;
+        T_TYPE = (byte) 0x03;
         T_SOFT_VERSION = (byte) 0;
-        T_ID = new byte[] {(byte) 0x02, (byte) 0x02, (byte) 0x02, (byte) 0x02};
+        T_ID = new byte[] {(byte) 0x03, (byte) 0x03, (byte) 0x03, (byte) 0x03};
 
         //simulatorInterface = new JavaxSmartCardInterface(); // SIM
         buildGUI(parent);
@@ -84,7 +84,7 @@ public class TChar extends PRFETerminal {
         add(display, BorderLayout.NORTH);
         keypad = new JPanel(new GridLayout(5, 3));
         key("Read");
-        key("Charge");
+        key("Consume");
         key("Authenticate");
 
         key("7");
@@ -135,7 +135,7 @@ public class TChar extends PRFETerminal {
                     case "7":
                     case "8":
                     case "9":
-                    case "Charge":
+                    case "Consume":
                     case "Revoke":
                     case "Rekey":
                     default:
