@@ -14,7 +14,7 @@ JCARDSIM=jcardsim-3.0.4-SNAPSHOT
 # way more than is probably needed
 JC_CLASSPATH=${JC_HOME}/lib/apdutool.jar:${JC_HOME}/lib/apduio.jar:${JC_HOME}/lib/converter.jar:${JC_HOME}/lib/jcwde.jar:${JC_HOME}/lib/scriptgen.jar:${JC_HOME}/lib/offcardverifier.jar:${JC_HOME}/lib/api.jar:${JC_HOME}/lib/installer.jar:${JC_HOME}/lib/capdump.jar:${JC_HOME}/samples/classes:${CLASSPATH}
 
-all: applet TManTerminal TCharTerminal TConsTerminal TMan TChar TCons
+all: applet PRFETerminal TermSim TManTerminal TCharTerminal TermSim runTerminals #TCharTerminal TConsTerminal TMan TChar TCons
 
 applet: CardApplet/bin/CardApplet.class
 
@@ -31,65 +31,44 @@ runCardQuickTest: CardQuickTest
 
 
 # ===== TMan =====
-TMan: TMan/bin/terminal/QuickTest.class
+TManQuicktest: TMan/bin/terminal/QuickTest.class
 
 TMan/bin/terminal/QuickTest.class: TMan/src/terminal/QuickTest.java
 	javac -d TMan/bin -cp ${JC_HOME}:util/jcardsim/${JCARDSIM}.jar:CardApplet/bin TMan/src/terminal/QuickTest.java
 
-runTMan:
-	# Sends some sample APDUs to the CardApplet
-	java -cp util/jcardsim/${JCARDSIM}.jar:TMan/bin:CardApplet/bin terminal.QuickTest
+runTManQuicktest:
+	# Sends some sample APDUs to the CalcApplet
+	java -cp util/jcardsim/${JCARDSIM}.jar:CalcTerminal/bin:TMan/bin terminal.QuickTest
+
+TMan: TMan/bin/terminal/TMan.class
+
+TermSim: TMan/bin/terminal/TermSim.class
+
+TMan/bin/terminal/TermSim.class: TMan/src/terminal/TermSim.java
+	javac -d TMan/bin -cp ${JC_HOME}:util/jcardsim/${JCARDSIM}.jar:CardApplet/bin:TMan/bin TMan/src/terminal/TermSim.java
+
+PRFETerminal: TMan/bin/terminal/PRFETerminal.class
+
+TMan/bin/terminal/PRFETerminal.class: TMan/src/terminal/PRFETerminal.java
+	javac -d TMan/bin -cp ${JC_HOME}:util/jcardsim/${JCARDSIM}.jar:CardApplet/bin:TMan/bin TMan/src/terminal/PRFETerminal.java
 
 TManTerminal: TMan/bin/terminal/TMan.class
 
 TMan/bin/terminal/TMan.class: TMan/src/terminal/TMan.java
 	javac -d TMan/bin -cp ${JC_HOME}:util/jcardsim/${JCARDSIM}.jar:CardApplet/bin:TMan/bin TMan/src/terminal/TMan.java
 
-runTManTerminal:
+TCharTerminal: TMan/bin/terminal/TChar.class
+
+TMan/bin/terminal/TChar.class: TMan/src/terminal/TChar.java
+	javac -d TMan/bin -cp ${JC_HOME}:util/jcardsim/${JCARDSIM}.jar:CardApplet/bin:TMan/bin TMan/src/terminal/TChar.java
+
+runTerminals:
 	# Runs the GUI terminal
-	java -Djdk.sunec.disableNative=false -cp util/jcardsim/${JCARDSIM}.jar:TMan/bin:CardApplet/bin terminal.TMan
+	java -Djdk.sunec.disableNative=false -cp util/jcardsim/${JCARDSIM}.jar:TMan/bin:CardApplet/bin terminal.TermSim
 
 
-# ===== TCons =====
-TCons: TCons/bin/terminal/QuickTest.class
 
-TCons/bin/terminal/QuickTest.class: TCons/src/terminal/QuickTest.java
-	javac -d TCons/bin -cp ${JC_HOME}:util/jcardsim/${JCARDSIM}.jar:CardApplet/bin TCons/src/terminal/QuickTest.java
-
-runTCons:
-	# Sends some sample APDUs to the CardApplet
-	java -cp util/jcardsim/${JCARDSIM}.jar:TCons/bin:CardApplet/bin terminal.QuickTest
-
-TConsTerminal: TCons/bin/terminal/TCons.class
-
-TCons/bin/terminal/TCons.class: TCons/src/terminal/TCons.java
-	javac -d TCons/bin -cp ${JC_HOME}:util/jcardsim/${JCARDSIM}.jar:CardApplet/bin:TCons/bin TCons/src/terminal/TCons.java
-
-runTConsTerminal:
-	# Runs the GUI terminal
-	java -cp util/jcardsim/${JCARDSIM}.jar:TCons/bin:CardApplet/bin terminal.TCons
-
-# ===== TChar =====
-TChar: TChar/bin/terminal/QuickTest.class
-
-TChar/bin/terminal/QuickTest.class: TChar/src/terminal/QuickTest.java
-	javac -d TChar/bin -cp ${JC_HOME}:util/jcardsim/${JCARDSIM}.jar:CardApplet/bin TChar/src/terminal/QuickTest.java
-
-runTChar:
-	# Sends some sample APDUs to the CardApplet
-	java -cp util/jcardsim/${JCARDSIM}.jar:TChar/bin:CardApplet/bin terminal.QuickTest
-
-TCharTerminal: TChar/bin/terminal/TChar.class
-
-TChar/bin/terminal/TChar.class: TChar/src/terminal/TChar.java
-	javac -d TChar/bin -cp ${JC_HOME}:util/jcardsim/${JCARDSIM}.jar:CardApplet/bin:TChar/bin TChar/src/terminal/TChar.java
-
-runTCharTerminal:
-	# Runs the GUI terminal
-	java -cp util/jcardsim/${JCARDSIM}.jar:TChar/bin:CardApplet/bin terminal.TChar
 
 clean:
 	rm -rf CardApplet/bin/*
 	rm -rf TMan/bin/*
-	rm -rf TChar/bin/*
-	rm -rf TCons/bin/*

@@ -58,10 +58,10 @@ import terminal.PRFETerminal;
  * @author erikpoll
  *
  */
-public class TMan extends PRFETerminal {
+public class TChar extends PRFETerminal {
     private static final byte PERS_INS = (byte) 0x50;
 
-    public TMan(JFrame parent, KeyPair TManKP, KeyPair TCharKP, KeyPair TConsKP,
+    public TChar(JFrame parent, KeyPair TManKP, KeyPair TCharKP, KeyPair TConsKP,
                 KeyPair ServerKP, KeyPair CardKP, KeyPair ReCardKP) {
         super();
 
@@ -72,9 +72,9 @@ public class TMan extends PRFETerminal {
         Card = CardKP;
         ReCard = ReCardKP;
 
-        T_TYPE = (byte) 0x01;
+        T_TYPE = (byte) 0x02;
         T_SOFT_VERSION = (byte) 0;
-        T_ID = new byte[] {(byte) 0x01, (byte) 0x01, (byte) 0x01, (byte) 0x01};
+        T_ID = new byte[] {(byte) 0x02, (byte) 0x02, (byte) 0x02, (byte) 0x02};
 
         //simulatorInterface = new JavaxSmartCardInterface(); // SIM
         buildGUI(parent);
