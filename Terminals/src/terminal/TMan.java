@@ -140,14 +140,6 @@ public class TMan extends PRFETerminal {
         byte[] buffer0 = new byte[228];
         byte[] buffer1 = new byte[172];
 
-        /**
-         * TODO: put this in report:
-         * we do not do appropriate key management in this example. 
-         * For personalisation the keys are simply generated, and the card is only persistently usable for a single run of the simulator.
-         * In reality, the keypairs are the same for all devices of the same category.
-         * 
-         */
-
         // Then add them to buffers:
         ((ECPublicKey) TMan.getPublic()).getW(buffer0, (short) 0);
         ((ECPublicKey) TChar.getPublic()).getW(buffer0, (short) 51);
