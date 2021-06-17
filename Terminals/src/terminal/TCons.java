@@ -110,7 +110,7 @@ public class TCons extends PRFETerminal {
         display.setBackground(Color.darkGray);
         display.setForeground(Color.green);
         add(display, BorderLayout.NORTH);
-        keypad = new JPanel(new GridLayout(5, 3));
+        keypad = new JPanel(new GridLayout(6, 3));
         key("Read");
         key("Consume");
         key("Authenticate");
@@ -174,6 +174,7 @@ public class TCons extends PRFETerminal {
                         break;
                     case "Consume":
                         //consumeQuota();
+                        //setText(consumeQuota());
                         resetSession();
                         break;
                     case "Revoke":
@@ -229,11 +230,11 @@ public class TCons extends PRFETerminal {
 
         short amount = (short) consumeAmount;
 
-        if (petrolQuotaOnCard - amount < 0){
-            return "Insufficient petrol credits left";
-        }
-        else if (amount > CONSUME_LIMIT){
+        if (amount > CONSUME_LIMIT){
             return "Requested amount larger than maximum value";
+        }
+        else if (petrolQuotaOnCard - amount < 0){
+            return "Insufficient petrol credits left";
         }
 
         short wantedPetrol = (short) (petrolQuotaOnCard - amount);
@@ -274,7 +275,6 @@ public class TCons extends PRFETerminal {
                 System.arraycopy(nonceT, 0, dataBuffer, 6, NONCET_LENGTH);
 
 
-
                 signature.init(skey, Signature.MODE_SIGN);
                 signature.sign(dataBuffer, (short) 0, (short) 14, sigBuffer, (short) 6);
 
@@ -285,15 +285,14 @@ public class TCons extends PRFETerminal {
 
                     response3 = applet.transmit(cons3Command);
                 } catch (CardException e) {
-                    //TODO: do something with the exception
                     System.out.println(e);
-
                     return "Transmit error";
                 }
             }
         }
-
+        return "Successful transaction";
     };
+
     public byte[] generateNonce(){
         SecureRandom random = new SecureRandom();
         byte nonce[] = new byte[NONCET_LENGTH];
@@ -301,22 +300,15 @@ public class TCons extends PRFETerminal {
         return nonce;
     };
 
-//    void setMaxGas(short wantedPetrol){
-//        if (wantedPetrol > CONSUME_LIMIT){
-//            System.out.print("Requested petrol amount too high");
-//        }
-//        maxGas = wantedPetrol;
-//        return;
-//    };                                                                             //set the max amount of gas available to the buyer based on the quota on card (a short?)
 
     short getGasUsed(short amount, short remainingPetrolQuota){
-
+        short temporaryQuota = remainingPetrolQuota;
         for(int i = 0; i < amount; i++){
             System.out.print("Dispensing petrol....");
-            remainingPetrolQuota -= 1; //reduce the remaining quota by 1, one step at a time, this should eventually equal
+            temporaryQuota -= 1; //reduce the remaining quota by 1, one step at a time, this should eventually equal
             // petrolQuotaOnCard - amount, if not then we deal with this in terminal
         }
-        return remainingPetrolQuota;
+        return temporaryQuota;
     };
 
     private void incNonce (byte[] nonce) {
