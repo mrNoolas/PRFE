@@ -286,25 +286,7 @@ public class TChar extends JPanel implements ActionListener {
 	}
 
 
-	public void revoke(CardApplet card) {
-		byte[] sigBuffer = new byte[SIGN_LENGTH+NONCET_LENGTH];
-		sigBuffer[0] = REV_INS;
-		System.arraycopy(cardID, (short) 0, sigBuffer, (short) 1, (short) 4);
-		System.arraycopy(nonceT, (short) 0, sigBuffer, (short) 5, NONCET_LENGTH);
-		
-		signature.init(skey, Signature.MODE_SIGN);
-		signature.sign(sigBuffer, (short) 0, (short) 13, sigBuffer, (short) 0);
-		System.arraycopy(nonceT, (short) 0, sigBuffer, SIGN_LENGTH, NONCET_LENGTH);
-		CommandAPDU revokeCommand = new CommandAPDU((int) PRFE_CLA, (int) REV_INS, (int) TERMINAL_TYPE, (int) TERMINAL_SOFTWARE_VERSION, sigBuffer);
-		ResponseAPDU response;
 
-		try {
-			response = applet.transmit(revokeCommand);
-		} catch (CardException e) {
-			System.out.println(e);
-		}
-		
-	}
 
 	public byte[] hash(byte[] data) {
 		// Hash the message using hash function
@@ -341,9 +323,6 @@ public class TChar extends JPanel implements ActionListener {
 		} catch (CardException e) {
 			System.out.println(e);
 		}
-
-
-
 
 	}
 

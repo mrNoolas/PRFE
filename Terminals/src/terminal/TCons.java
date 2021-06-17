@@ -59,7 +59,6 @@ public class TCons extends PRFETerminal {
     static final int DISPLAY_WIDTH = 60;
 
     int consumeAmount = 0;
-    short maxGas = 0;
 
 
     public TCons(JFrame parent, KeyPair TManKP, KeyPair TCharKP, KeyPair TConsKP,
@@ -116,6 +115,10 @@ public class TCons extends PRFETerminal {
         key("Consume");
         key("Authenticate");
 
+        key("Consume");
+        key("Revoke");
+        key("Rekey");
+
         key("7");
         key("8");
         key("9");
@@ -170,7 +173,7 @@ public class TCons extends PRFETerminal {
                         keyPressed(Integer.parseInt(s));
                         break;
                     case "Consume":
-                        consumeQuota();
+                        //consumeQuota();
                         resetSession();
                         break;
                     case "Revoke":
@@ -187,7 +190,7 @@ public class TCons extends PRFETerminal {
         }
     }
 
-    public String consumeQuota(){                                                        //use an amount of petrol quota on the card
+ /*   public String consumeQuota(){                                                        //use an amount of petrol quota on the card
         //send sequence number to card to start the consumption transaction
         byte[] nonceT = generateNonce();
         byte[] sigBuffer = new byte[2*SIGN_LENGTH];
@@ -328,6 +331,7 @@ public class TCons extends PRFETerminal {
         }
         // Any remaining carry is just ignored.
     };
+*/
 
 
     public Dimension getPreferredSize() {
