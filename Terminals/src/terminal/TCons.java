@@ -49,12 +49,17 @@ import terminal.PRFETerminal;
 
 public class TCons extends PRFETerminal {
     private static final byte PERS_INS = (byte) 0x50;
+    private static final byte CONS_INS = (byte) 0x30;
     private static final int CONSUME_LIMIT = 2000;
+    private static final short NONCET_LENGTH  = 8;
+    private static final short SIGN_LENGTH = 56;
+
 
     static final Dimension PREFERRED_SIZE = new Dimension(900, 300);
     static final int DISPLAY_WIDTH = 60;
 
     int consumeAmount = 0;
+    short maxGas = 0;
 
 
     public TCons(JFrame parent, KeyPair TManKP, KeyPair TCharKP, KeyPair TConsKP,
@@ -84,7 +89,7 @@ public class TCons extends PRFETerminal {
 
     void resetSession() {
         consumeAmount = 0;
-        setText("Enter the amount you would like to consume:")
+        setText("Enter the amount you would like to consume:");
     }
 
     void keyPressed(int key) {
@@ -150,7 +155,7 @@ public class TCons extends PRFETerminal {
                         break;
                     case "Switch":
                         switchCallback.switchTerminal(T_TYPE);
-                        resetTerminal();
+                        resetConnection();
                         break;
                     case "0":
                     case "1":
@@ -219,25 +224,15 @@ public class TCons extends PRFETerminal {
             return "Signature invalid";
         }
 
-        short amount = 0;
-        //amount = entered by the buyer
+        short amount = (short) consumeAmount;
 
-        //TODO: read input and put this value into short amount
-        char[] inputAmount = new char[5]; //max value for short amounts is a 5 digit number, so input cant be more than that
-        //read input characters
-        //parse char[] as short -> inputamount as a string, then parseShort (string);
-        //if amount > Short.MAX_VALUE: return error -> amount exceeds maximum
-
-
-        //buffer for key listener and read in from that?
-        //card has quota balance, if amount is larger than this, return error
         if (petrolQuotaOnCard - amount < 0){
             return "Insufficient petrol credits left";
         }
-        else if (amount > maxGas){
+        else if (amount > CONSUME_LIMIT){
             return "Requested amount larger than maximum value";
         }
-        //if quota on card - amount < 0 : exit
+
         short wantedPetrol = (short) (petrolQuotaOnCard - amount);
         incNonce(nonceC); //sequence nr + 2
         nonceT = nonceC;
@@ -251,7 +246,7 @@ public class TCons extends PRFETerminal {
         signature.init(skey, Signature.MODE_SIGN);
         signature.sign(dataBuffer, (short) 0, (short) 14, sigBuffer, (short) 6);
 
-        CommandAPDU cons2Command = new CommandAPDU((int) PRFE_CLA, (int) CONS_INS, (int) TERMINAL_TYPE, (int)TERMINAL_SOFTWARE_VERSION, sigBuffer);
+        CommandAPDU cons2Command = new CommandAPDU((int) PRFE_CLA, (int) CONS_INS, (int) T_TYPE, (int) T_SOFT_VERSION, sigBuffer);
 
         ResponseAPDU response2;
         try {
@@ -266,7 +261,6 @@ public class TCons extends PRFETerminal {
         nonceT = nonceC;
         byte[] responseData = response2.getData();
         if(responseData[0] == (byte) 1){
-            setMaxGas(amount);
             short remainingPetrolQuota = getGasUsed(amount, petrolQuotaOnCard);
             if(remainingPetrolQuota < wantedPetrol){
 
@@ -277,15 +271,11 @@ public class TCons extends PRFETerminal {
                 System.arraycopy(nonceT, 0, dataBuffer, 6, NONCET_LENGTH);
 
 
-                System.arraycopy(cardID, 0, sigBuffer, 0, 4);
-                Util.setShort(sigBuffer, (short) 4, updatedQuota);
-                System.arraycopy(signedData, 0, sigBuffer, 6, SIGN_LENGTH);
-
 
                 signature.init(skey, Signature.MODE_SIGN);
                 signature.sign(dataBuffer, (short) 0, (short) 14, sigBuffer, (short) 6);
 
-                CommandAPDU cons3Command = new CommandAPDU((int) PRFE_CLA, (int) CONS_INS, (int) TERMINAL_TYPE, (int)TERMINAL_SOFTWARE_VERSION, sigBuffer);
+                CommandAPDU cons3Command = new CommandAPDU((int) PRFE_CLA, (int) CONS_INS, (int) T_TYPE, (int)T_SOFT_VERSION, sigBuffer);
 
                 ResponseAPDU response3;
                 try {
@@ -301,6 +291,44 @@ public class TCons extends PRFETerminal {
         }
 
     };
+    public byte[] generateNonce(){
+        SecureRandom random = new SecureRandom();
+        byte nonce[] = new byte[NONCET_LENGTH];
+        random.nextBytes(nonce);
+        return nonce;
+    };
+
+//    void setMaxGas(short wantedPetrol){
+//        if (wantedPetrol > CONSUME_LIMIT){
+//            System.out.print("Requested petrol amount too high");
+//        }
+//        maxGas = wantedPetrol;
+//        return;
+//    };                                                                             //set the max amount of gas available to the buyer based on the quota on card (a short?)
+
+    short getGasUsed(short amount, short remainingPetrolQuota){
+
+        for(int i = 0; i < amount; i++){
+            System.out.print("Dispensing petrol....");
+            remainingPetrolQuota -= 1; //reduce the remaining quota by 1, one step at a time, this should eventually equal
+            // petrolQuotaOnCard - amount, if not then we deal with this in terminal
+        }
+        return remainingPetrolQuota;
+    };
+
+    private void incNonce (byte[] nonce) {
+        for (short i = (short) 7; i >= (short) 0; i--) {
+            if (nonce[i] == 0xff) {
+                nonce[i] = (byte) 0x00;
+                // Continue looping to process carry
+            } else {
+                nonce[i] = (byte) (((short) (nonce[i] & 0xff) + 1) & 0xff); // increment byte with 1, unsigned
+                break; // no carry so quit
+            }
+        }
+        // Any remaining carry is just ignored.
+    };
+
 
     public Dimension getPreferredSize() {
         return PREFERRED_SIZE;
