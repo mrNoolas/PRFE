@@ -77,14 +77,14 @@ public class TCons extends PRFETerminal {
         resetConnection();
     }
 
-    void resetConnection() {
+    public void resetConnection() {
         super.resetConnection();
         resetSession();
     }
 
-    void resetSession() {
+    private void resetSession() {
         consumeAmount = 0;
-        setText("Enter the amount you would like to consume:")
+        setText("Enter the amount you would like to consume:");
     }
 
     void keyPressed(int key) {
@@ -150,7 +150,7 @@ public class TCons extends PRFETerminal {
                         break;
                     case "Switch":
                         switchCallback.switchTerminal(T_TYPE);
-                        resetTerminal();
+                        resetConnection();
                         break;
                     case "0":
                     case "1":

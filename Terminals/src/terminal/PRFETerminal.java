@@ -174,7 +174,7 @@ public abstract class PRFETerminal extends JPanel implements ActionListener {
         }
     }
 
-    private void resetConnection(){
+    public void resetConnection(){
         cardID = new byte[] {0,0,0,0};
         cardSoftVers = 0;
         cardAuthenticated = false;
