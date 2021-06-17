@@ -77,6 +77,10 @@ public class TermSim {
         CardKP = new KeyPair(KeyPair.ALG_EC_F2M, (short) 193);
         ReCardKP = new KeyPair(KeyPair.ALG_EC_F2M, (short) 193);
 
+        /**
+         * TODO: put this in report:
+         *
+         */
         // generate all the keys:
         TManKP.genKeyPair();
         TCharKP.genKeyPair();
