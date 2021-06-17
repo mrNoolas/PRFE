@@ -47,17 +47,7 @@ import com.licel.jcardsim.smartcardio.CardSimulator;
 import applet.CardApplet;
 import terminal.PRFETerminal;
 
-/**
- * Sample terminal for the Calculator applet.
- *
- * Code added for hooking in the simulator is marked with SIM
- *
- * @author Martijno
- * @author woj
- * @author Pim Vullers
- * @author erikpoll
- *
- */
+
 public class TMan extends PRFETerminal {
     private static final byte PERS_INS = (byte) 0x50;
 
@@ -116,23 +106,27 @@ public class TMan extends PRFETerminal {
                     case "Read": // read
                     case "Reset":
                         setText(readCard(T_TYPE, T_SOFT_VERSION, T_ID));
+                        resetConnection();
                         break;
                     case "Authenticate": // authenticate
                         setText(authenticate(T_TYPE, T_SOFT_VERSION, T_ID));
                         break;
                     case "Personalise":
                         setText(personalise());
+                        resetConnection();
                         break;
                     case "Quit":
                         System.exit(0);
                         break;
                     case "Switch":
                         switchCallback.switchTerminal(T_TYPE);
+                        resetConnection();
                         break;
                     case "Revoke":
                     case "Rekey":
                     default:
                         setText("nop"); //sendKey((byte) c));
+                        resetConnection();
                         break;
                 }
             }

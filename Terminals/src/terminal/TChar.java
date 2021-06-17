@@ -115,6 +115,7 @@ public class TChar extends PRFETerminal {
                     case "Read": // read
                     case "Reset":
                         setText(readCard(T_TYPE, T_SOFT_VERSION, T_ID));
+                        resetConnection();
                         break;
                     case "Authenticate": // authenticate
                         setText(authenticate(T_TYPE, T_SOFT_VERSION, T_ID));
@@ -140,6 +141,7 @@ public class TChar extends PRFETerminal {
                     case "Rekey":
                     default:
                         setText("nop");
+                        resetConnection();
                         break;
                 }
             }

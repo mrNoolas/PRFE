@@ -174,7 +174,7 @@ public abstract class PRFETerminal extends JPanel implements ActionListener {
         }
     }
 
-    private void resetTerminal(){
+    private void resetConnection(){
         cardID = new byte[] {0,0,0,0};
         cardSoftVers = 0;
         cardAuthenticated = false;
@@ -204,7 +204,7 @@ public abstract class PRFETerminal extends JPanel implements ActionListener {
     }
     
     public int readCard(byte termType, byte termSoftVers, byte[] termID) {                                                 //default method, read information on card
-        resetTerminal();
+        resetConnection();
 
         //construct a commandAPDU with the INS byte for read and the terminal info
         CommandAPDU readCommand = new CommandAPDU(PRFE_CLA, READ_INS, termType, termSoftVers, termID, 0, ID_LENGTH, 8);
@@ -260,7 +260,7 @@ public abstract class PRFETerminal extends JPanel implements ActionListener {
         }
     
         // First initialise the session key
-        resetTerminal();
+        resetConnection();
         byte[] buffer = new byte[93];
         keyExchangeKP.genKeyPair();
 
@@ -281,7 +281,7 @@ public abstract class PRFETerminal extends JPanel implements ActionListener {
             response = applet.transmit(command);
         } catch (CardException e) {
             // TODO: do something with the exception
-            resetTerminal();
+            resetConnection();
 
             System.out.println(e);
             return "Transmit Error";
@@ -320,7 +320,7 @@ public abstract class PRFETerminal extends JPanel implements ActionListener {
         signature.init(Card.getPublic(), Signature.MODE_VERIFY);
 
         if (!signature.verify(data, (short) 0, (short) 105, data, (short) 105, (short) 56)) {
-            resetTerminal();
+            resetConnection();
             return "Auth failed, return sig invalid";
         }
 
@@ -333,7 +333,7 @@ public abstract class PRFETerminal extends JPanel implements ActionListener {
         System.arraycopy(data, 101, CCert, 5, 4);
 
         if (!signature.verify(CCert, (short) 0, (short) 9, data, (short) 45, (short) 56)) {
-            resetTerminal();
+            resetConnection();
             return "Auth failed, CCert invalid";
         }
 
@@ -390,7 +390,7 @@ public abstract class PRFETerminal extends JPanel implements ActionListener {
             response = applet.transmit(command2);
         } catch (CardException e) {
             // TODO: do something with the exception
-            resetTerminal();
+            resetConnection();
 
             System.out.println(e);
             return "Transmit Error";
@@ -408,13 +408,13 @@ public abstract class PRFETerminal extends JPanel implements ActionListener {
         AESCipher.doFinal(data, (short) 0, (short) 16, data, (short) 0);
 
         if (!Arrays.equals(data, 0, 8, nonceC, 0, 8)) {
-            resetTerminal();
+            resetConnection();
             return "NonceC returned incorrectly, authentication unsuccesful";
         }
 
         incNonce(nonceT);
         if (!Arrays.equals(data, 8, 16, nonceT, 0, 8)) {
-            resetTerminal();
+            resetConnection();
             return "NonceT returned incorrectly, authentication unsuccesful";
         }
         
