@@ -123,6 +123,8 @@ public class TMan extends PRFETerminal {
                         resetConnection();
                         break;
                     case "Revoke":
+                        setText(revoke(T_TYPE, T_SOFT_VERSION));
+                        break;
                     case "Rekey":
                     default:
                         setText("nop"); //sendKey((byte) c));

@@ -165,7 +165,7 @@ public class TCons extends PRFETerminal {
                         keyPressed(Integer.parseInt(s));
                         break;
                     case "Consume":
-                        consumeQuota();
+                        //consumeQuota();
                         resetSession();
                         break;
                     case "Revoke":
@@ -182,7 +182,7 @@ public class TCons extends PRFETerminal {
         }
     }
 
-    public String consumeQuota(){                                                        //use an amount of petrol quota on the card
+ /*   public String consumeQuota(){                                                        //use an amount of petrol quota on the card
         //send sequence number to card to start the consumption transaction
         byte[] nonceT = generateNonce();
         byte[] sigBuffer = new byte[2*SIGN_LENGTH];
@@ -300,7 +300,7 @@ public class TCons extends PRFETerminal {
             }
         }
 
-    };
+    };*/
 
     public Dimension getPreferredSize() {
         return PREFERRED_SIZE;

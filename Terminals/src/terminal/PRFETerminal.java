@@ -71,6 +71,7 @@ public abstract class PRFETerminal extends JPanel implements ActionListener {
     static final byte PRFE_CLA = (byte) 0xb0;
     static final byte READ_INS = (byte) 0x00;
     static final byte AUTH_INS = (byte) 0x10;
+    static final byte REV_INS = (byte) 0x40;
 
     // length constants
     static final short ID_LENGTH = 4;
@@ -99,7 +100,7 @@ public abstract class PRFETerminal extends JPanel implements ActionListener {
     // Session data:
     protected byte[] cardID;
     protected byte cardSoftVers;
-    protected boolean cardAuthenticated = false;
+    protected boolean authenticated = false;
     protected byte cardType;
     protected int petrolQuota;
     protected byte[] nonceC;
@@ -164,27 +165,16 @@ public abstract class PRFETerminal extends JPanel implements ActionListener {
         setText(Integer.toString(n));
     }
 
-    void setText(ResponseAPDU apdu) {
-        byte[] data = apdu.getData();
-        int sw = apdu.getSW();
-        if (sw != 0x9000 || data.length < 5) {
-            setText(MSG_ERROR);
-        } else {
-            setText((short) (((data[3] & 0x000000FF) << 8) | (data[4] & 0x000000FF)));
-        }
-    }
-
     public void resetConnection(){
         cardID = new byte[] {0,0,0,0};
         cardSoftVers = 0;
-        cardAuthenticated = false;
+        authenticated = false;
         cardType = 0;
         petrolQuota = 0;
         
         nonceC = new byte[] {0,0,0,0, 0,0,0,0};
         nonceT = new byte[] {0,0,0,0, 0,0,0,0};
     }
-
 
 
     /**
@@ -340,7 +330,7 @@ public abstract class PRFETerminal extends JPanel implements ActionListener {
         // Finally store verified data of the card
         System.arraycopy(data, 33, cardID, 0, 4);
         System.arraycopy(data, 37, nonceC, 0, 8);
-        cardAuthenticated = true;
+        authenticated = true;
         
         // ================== Authentication Phase 2
         // Move forward with authenticating Terminal to card
@@ -420,6 +410,33 @@ public abstract class PRFETerminal extends JPanel implements ActionListener {
         
         System.out.println("Authentication Successful");
         return "Authentication Successful";
+    }
+
+    public String revoke(byte termType, byte termSoftVers) {
+        byte[] revSign = switchCallback.revokeCard(cardID);
+
+        if (authenticated) {
+            CommandAPDU revokeCommand = new CommandAPDU(PRFE_CLA, REV_INS, termType, termSoftVers, revSign);
+            ResponseAPDU response;
+
+            try {
+                response = applet.transmit(revokeCommand);
+            } catch (CardException e) {
+                // Card did not accept revocation, it is probably rogue.
+                System.out.println(e);
+                System.out.println("Revocation not accepted by card");
+                return "Revocation not accepted by card";
+            }
+
+            byte[] data = response.getBytes();
+            if (data[0] == 0x90 && data[1] == 0) {
+                System.out.println("Revocaton Succesful");
+                return "Revocaton Succesful";
+            }
+            return "Revocation not accepted by card";
+        } else {
+            return "Must auth to send rev to the card!";
+        }
     }
 
     public abstract Dimension getPreferredSize();

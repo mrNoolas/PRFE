@@ -23,6 +23,8 @@ import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.util.List;
 import java.util.Arrays;
+import java.util.Set;
+import java.util.HashSet;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.security.SecureRandom;
@@ -69,7 +71,16 @@ public class TermSim {
     private KeyPair CardKP;
     private KeyPair ReCardKP;
 
+    private Signature signature;
+
+    /**
+     * TODO: really this should keep more records: e.g. when the card was revoked, why, by which terminal, etc.
+     */
+    private Set<byte[]> revokedCards;
+
     public TermSim (JFrame tManParent, JFrame tConsParent, JFrame tCharParent) {
+        revokedCards = new HashSet();
+
         TManKP = new KeyPair(KeyPair.ALG_EC_F2M, (short) 193);
         TCharKP = new KeyPair(KeyPair.ALG_EC_F2M, (short) 193);
         TConsKP = new KeyPair(KeyPair.ALG_EC_F2M, (short) 193);
@@ -77,10 +88,6 @@ public class TermSim {
         CardKP = new KeyPair(KeyPair.ALG_EC_F2M, (short) 193);
         ReCardKP = new KeyPair(KeyPair.ALG_EC_F2M, (short) 193);
 
-        /**
-         * TODO: put this in report:
-         *
-         */
         // generate all the keys:
         TManKP.genKeyPair();
         TCharKP.genKeyPair();
@@ -88,6 +95,8 @@ public class TermSim {
         ServerKP.genKeyPair();
         CardKP.genKeyPair();
         ReCardKP.genKeyPair();
+
+        signature = Signature.getInstance(Signature.ALG_ECDSA_SHA, false);
 
         // Setup Terminals TODO: reduce the keys that are given to each terminal
         tMan = new TMan(tManParent, TManKP, TCharKP, TConsKP, ServerKP, CardKP, ReCardKP);
@@ -197,6 +206,29 @@ public class TermSim {
                     System.err.println("Card status problem!");
                 }
             }
+        }
+
+        public byte[] revokeCard(byte[] cardID) {
+            if (cardID.length == 4) { // if not 4 then it is an invalid ID
+                revokedCards.add(cardID);
+            } else {
+                return null;
+            }
+
+            byte[] signOut = new byte[56];
+
+            // then make signature
+            signature.init(ServerKP.getPrivate(), Signature.MODE_SIGN);
+            signature.update(cardID, (short) 0, (short) 4);
+            // add "server revoke"; really this should be the ID of the server and the ID of the terminal that initiated a revoke
+            signature.sign(new byte[] {(byte) 0x73, (byte) 0x65, (byte) 0x72, (byte) 0x76, (byte) 0x65, (byte) 0x72,
+                    (byte) 0x20, (byte) 0x72, (byte) 0x65, (byte) 0x76, (byte) 0x6f, (byte) 0x6b, (byte) 0x65},
+                    (short) 0, (short) 13, signOut, (short) 0);
+            return signOut;
+        }
+
+        public boolean isRevokedCard(byte[] cardID) {
+            return revokedCards.contains(cardID);
         }
     }
 
