@@ -429,10 +429,11 @@ public abstract class PRFETerminal extends JPanel implements ActionListener {
             }
 
             byte[] data = response.getBytes();
-            if (data[0] == 0x90 && data[1] == 0) {
+            if ((data[0] & 0xff) == 0x90 && data[1] == 0) {
                 System.out.println("Revocaton Succesful");
                 return "Revocaton Succesful";
             }
+
             return "Revocation not accepted by card";
         } else {
             return "Must auth to send rev to the card!";
