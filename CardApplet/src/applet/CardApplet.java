@@ -908,7 +908,7 @@ public class CardApplet extends Applet implements ISO7816 {
                 consumePhase2(apdu, buffer);
                 break;
             case 0xc0:
-                //consumePhase3(apdu, buffer);
+                consumePhase3(apdu, buffer);
                 break;
             default:
                 select();
@@ -987,14 +987,11 @@ public class CardApplet extends Applet implements ISO7816 {
             select(); // reset
             //ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
             buffer[(short) 0] = (byte) 0xff; // not verified
-            System.out.println("cardMarker11");
-
         }
 
         short expectedLength = apdu.setOutgoing();
         if (expectedLength < (short) CONS2_RESP_LEN) ISOException.throwIt((short) (SW_WRONG_LENGTH | CONS2_RESP_LEN));
         apdu.setOutgoingLength((byte) CONS2_RESP_LEN);
-        System.out.println("cardMarker");
 
         incNonce(nonceC);
         //sign: cardid, byte indicating that the prev message was verified and nonceT
@@ -1002,79 +999,50 @@ public class CardApplet extends Applet implements ISO7816 {
         signature.update(cID, (short) 0, (short) 4);
         signature.update(buffer, (short) 0, (short) 1);
         signature.sign(nonceC, (short) 0, (short) 8, buffer, (short) 1);
-        System.out.println("cardMarker");
 
-        status[(short) 0] = (byte) (status[(short) 0] | 0x20);
+        status[(short) 0] = (byte) ((status[(short) 0] & 0x0f) | 0xc0);
         apdu.sendBytes((short) 0, (short) CONS2_RESP_LEN);
-        System.out.println("cardMarker");
 
         JCSystem.commitTransaction();
     }
 
     private void consumePhase3(APDU apdu, byte[] buffer){
+        short lc_length = apdu.setIncomingAndReceive();
+        if (lc_length < (byte) CONS3_INC_LENGTH) {
+            ISOException.throwIt((short) (SW_WRONG_LENGTH | CONS3_INC_LENGTH));
+        }
 
-        //        short lc_length = apdu.setIncomingAndReceive();
-        //        if (lc_length < (byte) CONS3_INC_LENGTH) {
-        //            ISOException.throwIt((short) (SW_WRONG_LENGTH | CONS3_INC_LENGTH));
-        //        }
-        //
-        //        buffer = apdu.getBuffer();
-        //
-        //        incNonce(nonceC);
-        //        nonceT = nonceC; //sequence nr + 4
-        //        incNonce(nonceT);
-        //        nonceC = nonceT; //sequence nr + 5
-        //
-        //        short incomingPetrolQuota = (short) Util.getShort(buffer, (short) 4); //read the short value after the card-id
-        //
-        //        Util.arrayCopyNonAtomic(buffer, (short) 0, sigBuffer, (short) 0, (short) 4); //copy card-id
-        //        Util.setShort(sigBuffer, (short) 4, incomingPetrolQuota); //set incoming petrol credit value
-        //        Util.arrayCopyNonAtomic(buffer, (short) 6, nonceT, (short) 0, (short) NONCE_LENGTH); //sequence number
-        //
-        //        AESCipher.init(skey, Cipher.MODE_DECRYPT);
-        //        AESCipher.doFinal(buffer, (short) 6, (short) 14, buffer, (short) 6);
-        //        byte verified = Util.arrayCompare(sigBuffer, (short) 0, buffer, (short) 6, (short) 14);
-        //
-        //        if(verified == (byte) 0){
-        //            if ((short) incomingPetrolQuota < (short) petrolCredits){
-        //                petrolCredits = (short) (petrolCredits + incomingPetrolQuota);
-        //            }
-        //
-        //            short expectedLength = apdu.setOutgoing();
-        //            if (expectedLength < (short) CONS3_RESP_LEN) ISOException.throwIt((short) (SW_WRONG_LENGTH | CONS3_RESP_LEN));
-        //            apdu.setOutgoingLength((byte) CONS3_RESP_LEN);
-        //
-        //            //send to terminal: two signatures
-        //
-        //            //mac(hash({card-id, TCert, petrolCredits, transaction_nr}, skey)
-        //            //mac({nonceC}, skey)
-        //
-        //
-        //            Util.arrayCopy(cID, (short) 0, sigBuffer, (short) 0, (short) 4);
-        //            Util.arrayCopy(TCert, (short) 0, sigBuffer, (short) 4, (short) SIGN_LENGTH); //TODO: TCert length
-        //            //   Util.setShort(sigBuffer, (short) 20, petrolCredits);
-        //            sigBuffer[(short) 60] = (byte) (petrolCredits & 0xff);
-        //            sigBuffer[(short) 61] = (byte) ((petrolCredits >> 8) & 0xff);
-        //            tNum = (short) (tNum + 1);
-        //            //Util.setShort(sigBuffer, (short) 22, tNum);
-        //            sigBuffer[(short) 62] = (byte) (tNum & 0xff);
-        //            sigBuffer[(short) 63] = (byte) ((tNum >> 8) & 0xff);
-        //
-        //            AESCipher.init(skey, Cipher.MODE_ENCRYPT);
-        //            AESCipher.doFinal(sigBuffer, (short) 0, (short) 64, buffer, (short) 0);
-        //
-        //            AESCipher.doFinal(nonceT, (short) 0, (short) NONCE_LENGTH, buffer, (short) SIGN_LENGTH);
-        //
-        //            apdu.setOutgoingAndSend((short) 0, (short) CONS3_RESP_LEN);
-        //            status[(short) 0] = (byte) (status[(short) 0] - 0x20);
+        incNonce(nonceT);
+        signature.init(pukTCons, Signature.MODE_VERIFY);
+        signature.update(cID, (short) 0, (short) 4);
+        signature.update(buffer, (short) 9, (short) 2);
+        signature.update(nonceT, (short) 0, NONCE_LENGTH);
 
-        //        }
-        //
-        //        if(verified != (byte) 0){
-        //            select();
-        //            ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
-        //        }
+        // TODO: check that the transaction number matches own and that new-quota is less than current.
+        Util.setShort(buffer, (short) 0, tNum); // get into array to split short into two bytes
+        if(!signature.verify(buffer, (short) 0, (short) 2, buffer, (short) 11, SIGN_LENGTH)) {
+            select(); // reset
+            ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
+        }
 
+        JCSystem.beginTransaction();
+        petrolCredits = Util.getShort(buffer, (short) 9);
+
+        short expectedLength = apdu.setOutgoing();
+        if (expectedLength < (short) CONS3_RESP_LEN) ISOException.throwIt((short) (SW_WRONG_LENGTH | CONS3_RESP_LEN));
+        apdu.setOutgoingLength((byte) CONS3_RESP_LEN);
+
+        incNonce(nonceC);
+        signature.init(prkc, Signature.MODE_SIGN);
+        signature.update(cID, (short) 0, (short) 4);
+        signature.update(TCert, (short) 0, (short) 20);
+        signature.update(buffer, (short) 9, (short) 2);
+        signature.sign(buffer, (short) 0, (short) 2, buffer, (short) 0); // tnum is still in buffer[0] and buffer[1]
+        System.out.println("cardMarker");
+
+        apdu.sendBytes((short) 0, (short) CONS3_RESP_LEN);
+        JCSystem.commitTransaction();
+        select();
     }
 
     /**
