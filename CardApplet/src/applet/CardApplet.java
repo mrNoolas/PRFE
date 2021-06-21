@@ -781,17 +781,21 @@ public class CardApplet extends Applet implements ISO7816 {
     private void charge(APDU apdu, byte[] buffer) {
         // TODO: check authentication status
         checkAndCopyTypeAndVersion(buffer);
-        switch (status[(short) 0] & 0xf0){
-            case 0x00:
-                chargePhase1(apdu, buffer);
-                break;
-            case 0x10:
-                chargePhase2(apdu, buffer);
-                break;
-            default:
-                select();
-                ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
-                break;
+        if ((short) (status[(short) 0] & 0x0f) == 0x02) { // only charge if the terminal is authenticated as TChar
+            switch (status[(short) 0] & 0xf0) {
+                case 0x00:
+                    chargePhase1(apdu, buffer);
+                    break;
+                case 0x10:
+                    chargePhase2(apdu, buffer);
+                    break;
+                default:
+                    select();
+                    ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
+                    break;
+            }
+        } else {
+            ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
         }
     }
 
