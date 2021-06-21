@@ -49,7 +49,11 @@ import terminal.PRFETerminal;
 
 public class TCons extends PRFETerminal {
     private static final byte PERS_INS = (byte) 0x50;
+    private static final byte CONS_INS = (byte) 0x30;
     private static final int CONSUME_LIMIT = 2000;
+    private static final short NONCET_LENGTH  = 8;
+    private static final short SIGN_LENGTH = 56;
+
 
     static final Dimension PREFERRED_SIZE = new Dimension(900, 300);
     static final int DISPLAY_WIDTH = 60;
@@ -106,10 +110,13 @@ public class TCons extends PRFETerminal {
         display.setBackground(Color.darkGray);
         display.setForeground(Color.green);
         add(display, BorderLayout.NORTH);
-        keypad = new JPanel(new GridLayout(5, 3));
+        keypad = new JPanel(new GridLayout(6, 3));
         key("Read");
         key("Consume");
         key("Authenticate");
+
+        key("Revoke");
+        key("Rekey");
 
         key("7");
         key("8");
@@ -170,6 +177,7 @@ public class TCons extends PRFETerminal {
                         break;
                     case "Consume":
                         //consumeQuota();
+                        setText(consumeQuota());
                         resetSession();
                         break;
                     case "Revoke":
@@ -188,7 +196,7 @@ public class TCons extends PRFETerminal {
         }
     }
 
- /*   public String consumeQuota(){                                                        //use an amount of petrol quota on the card
+   public String consumeQuota(){                                                        //use an amount of petrol quota on the card
         //send sequence number to card to start the consumption transaction
         byte[] nonceT = generateNonce();
         byte[] sigBuffer = new byte[2*SIGN_LENGTH];
@@ -225,25 +233,15 @@ public class TCons extends PRFETerminal {
             return "Signature invalid";
         }
 
-        short amount = 0;
-        //amount = entered by the buyer
+        short amount = (short) consumeAmount;
 
-        //TODO: read input and put this value into short amount
-        char[] inputAmount = new char[5]; //max value for short amounts is a 5 digit number, so input cant be more than that
-        //read input characters
-        //parse char[] as short -> inputamount as a string, then parseShort (string);
-        //if amount > Short.MAX_VALUE: return error -> amount exceeds maximum
-
-
-        //buffer for key listener and read in from that?
-        //card has quota balance, if amount is larger than this, return error
-        if (petrolQuotaOnCard - amount < 0){
-            return "Insufficient petrol credits left";
-        }
-        else if (amount > maxGas){
+        if (amount > CONSUME_LIMIT){
             return "Requested amount larger than maximum value";
         }
-        //if quota on card - amount < 0 : exit
+        else if (petrolQuotaOnCard - amount < 0){
+            return "Insufficient petrol credits left";
+        }
+
         short wantedPetrol = (short) (petrolQuotaOnCard - amount);
         incNonce(nonceC); //sequence nr + 2
         nonceT = nonceC;
@@ -257,7 +255,7 @@ public class TCons extends PRFETerminal {
         signature.init(skey, Signature.MODE_SIGN);
         signature.sign(dataBuffer, (short) 0, (short) 14, sigBuffer, (short) 6);
 
-        CommandAPDU cons2Command = new CommandAPDU((int) PRFE_CLA, (int) CONS_INS, (int) TERMINAL_TYPE, (int)TERMINAL_SOFTWARE_VERSION, sigBuffer);
+        CommandAPDU cons2Command = new CommandAPDU((int) PRFE_CLA, (int) CONS_INS, (int) T_TYPE, (int) T_SOFT_VERSION, sigBuffer);
 
         ResponseAPDU response2;
         try {
@@ -272,7 +270,6 @@ public class TCons extends PRFETerminal {
         nonceT = nonceC;
         byte[] responseData = response2.getData();
         if(responseData[0] == (byte) 1){
-            setMaxGas(amount);
             short remainingPetrolQuota = getGasUsed(amount, petrolQuotaOnCard);
             if(remainingPetrolQuota < wantedPetrol){
 
@@ -283,30 +280,56 @@ public class TCons extends PRFETerminal {
                 System.arraycopy(nonceT, 0, dataBuffer, 6, NONCET_LENGTH);
 
 
-                System.arraycopy(cardID, 0, sigBuffer, 0, 4);
-                Util.setShort(sigBuffer, (short) 4, updatedQuota);
-                System.arraycopy(signedData, 0, sigBuffer, 6, SIGN_LENGTH);
-
-
                 signature.init(skey, Signature.MODE_SIGN);
                 signature.sign(dataBuffer, (short) 0, (short) 14, sigBuffer, (short) 6);
 
-                CommandAPDU cons3Command = new CommandAPDU((int) PRFE_CLA, (int) CONS_INS, (int) TERMINAL_TYPE, (int)TERMINAL_SOFTWARE_VERSION, sigBuffer);
+                CommandAPDU cons3Command = new CommandAPDU((int) PRFE_CLA, (int) CONS_INS, (int) T_TYPE, (int)T_SOFT_VERSION, sigBuffer);
 
                 ResponseAPDU response3;
                 try {
 
                     response3 = applet.transmit(cons3Command);
                 } catch (CardException e) {
-                    //TODO: do something with the exception
                     System.out.println(e);
-
                     return "Transmit error";
                 }
             }
         }
+        return "Successful transaction";
+    };
 
-    };*/
+    public byte[] generateNonce(){
+        SecureRandom random = new SecureRandom();
+        byte nonce[] = new byte[NONCET_LENGTH];
+        random.nextBytes(nonce);
+        return nonce;
+    };
+
+
+    short getGasUsed(short amount, short remainingPetrolQuota){
+        short temporaryQuota = remainingPetrolQuota;
+        for(int i = 0; i < amount; i++){
+            System.out.print("Dispensing petrol....");
+            temporaryQuota -= 1; //reduce the remaining quota by 1, one step at a time, this should eventually equal
+            // petrolQuotaOnCard - amount, if not then we deal with this in terminal
+        }
+        return temporaryQuota;
+    };
+
+    private void incNonce (byte[] nonce) {
+        for (short i = (short) 7; i >= (short) 0; i--) {
+            if (nonce[i] == 0xff) {
+                nonce[i] = (byte) 0x00;
+                // Continue looping to process carry
+            } else {
+                nonce[i] = (byte) (((short) (nonce[i] & 0xff) + 1) & 0xff); // increment byte with 1, unsigned
+                break; // no carry so quit
+            }
+        }
+        // Any remaining carry is just ignored.
+    };
+
+
 
     public Dimension getPreferredSize() {
         return PREFERRED_SIZE;

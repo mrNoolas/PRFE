@@ -311,54 +311,6 @@ public class TCons extends JPanel implements ActionListener {
 
 
 
-//    public byte[] sign(byte[] data){
-//        signature.initSign(prkTCons);
-//        signature.update(data);
-//        byte[] signedData = signature.sign();
-//        return signedData;
-//    };
-//
-//    public byte[] hash(byte[] data){
-//        //create message digest using a certain hash algorithm
-//        MessageDigest md = MessageDigest.getInstance(""); //TODO: decide hash algorithm?
-//        //use hash to hash the data
-//        md.update(data);
-//        //generate the hash of the data
-//        byte[] hash = md.digest();
-//        return hash;
-//
-//    };
-//
-//    public byte[] mac(byte[] data, AESKey key){                                                                              //mac code for sending data between card and terminal, using java.crypto.Mac object?
-//        //create mac object
-//        Mac mac = Mac.getInstance("SHA-1"); //TODO: algorithm for mac?
-//        //initialise the Mac object with the skey
-//        mac.init(key);
-//        //compute mac
-//        byte[] macResult = mac.doFinal(data);
-//        return macResult;
-//    };
-//
-//    public boolean verify(byte[] signedData, byte[] key){
-//        signature.init(key, Signature.MODE_VERIFY);
-//        signature.verify(signedData);
-//        return true;
-//    };
-//
-//    public byte[] encryptAES(byte[] data, AESKey key){
-//        Cipher cipher = Cipher.getInstance("AES/ECB/PKCS5Padding");
-//        cipher.init(Cipher.ENCRYPT_MODE, key);
-//        byte[] encryptedData = cipher.doFinal(data);
-//        return encryptedData;
-//    }
-//
-//    public byte[] decryptAES(byte[] encryptedMessage, AESKey key){
-//        Cipher cipher = Cipher.getInstance("AES/ECB/PKCS5PADDING");
-//        cipher.init(Cipher.DECRYPT_MODE, key);
-//        byte[] decryptedMessage = cipher.doFinal(encryptedMessage);
-//        return decryptedMessage;
-//    }
-
 
     //original terminal code starts here
 
