@@ -284,7 +284,7 @@ public class TCons extends PRFETerminal {
         signature.update(data, (short) 0, (short) 8);
         signature.sign(nonceT, (short) 0, (short) 8, data, (short) 8);
 
-        consumeCommand = new CommandAPDU((int) PRFE_CLA, (int) CONS_INS, (int) T_TYPE, (int)T_SOFT_VERSION, data);
+        consumeCommand = new CommandAPDU(PRFE_CLA, CONS_INS, T_TYPE, T_SOFT_VERSION, data, 0, 64, 112);
         try {
             response = applet.transmit(consumeCommand);
         } catch (CardException e) {
@@ -292,26 +292,27 @@ public class TCons extends PRFETerminal {
         }
 
         data = response.getData();
-
+        System.out.println("terminalMarker");
         if(data[0] == (byte) 0) { // verified
             // Now we have subtracted the desired maximum amount of quota before filling the tank.
             // After dispensing the gas, calculate the difference between the actual usage and the earlier max-booking.
             // So finalise by communicating the difference with the card.
             short remainingPetrolQuota = getGasUsed(amount, petrolQuota);
-            if (remainingPetrolQuota < targetAmount) {
+            if (remainingPetrolQuota > targetAmount) {
                 short updatedQuota = (short) (targetAmount - remainingPetrolQuota);
 
+                System.out.println("terminalMarker");
                 incNonce(nonceC);
                 System.arraycopy(cardID, 0, buffer, 0, 4);
                 Util.setShort(buffer, (short) 4, updatedQuota);
                 System.arraycopy(nonceC, 0, buffer, 6, NONCET_LENGTH);
                 Util.setShort(buffer, (short) 14, tNum);
-
+                System.out.println("terminalMarker");
                 AESCipher.init(skey, Cipher.MODE_ENCRYPT);
                 AESCipher.doFinal(buffer, (short) 0, (short) 16, buffer, (short) 6);
-
+                System.out.println("terminalMarker");
                 CommandAPDU cons3Command = new CommandAPDU((int) PRFE_CLA, (int) CONS_INS, (int) T_TYPE, (int) T_SOFT_VERSION, buffer);
-
+                System.out.println("terminalMarker");
                 ResponseAPDU response3;
                 try {
                     response3 = applet.transmit(cons3Command);
@@ -319,96 +320,20 @@ public class TCons extends PRFETerminal {
                     System.out.println(e);
                     return "Transmit error";
                 }
+
+                // TODO: process response of card
             }
+            System.out.println("terminalMarker");
         }
 
-/** some old code that im not sure can still be useful **/
-/*
-//        System.arraycopy(cardID, 0, sigBuffer, 0, 4);
-//        Util.setShort(sigBuffer, (short) 4, petrolQuota);
-//        System.arraycopy(nonceC, 0, sigBuffer, 6, NONCET_LENGTH);
-//        Util.setShort(sigBuffer, (short) 14, (short) 0); //make data 16 bytes, could also use tnum?
-//
-//        AESCipher.init(skey, Cipher.MODE_DECRYPT);
-//        AESCipher.doFinal(data, (short) 6, (short) SIGN_LENGTH, sigBuffer, (short) 16);
-//        if ((Util.arrayCompare(sigBuffer, (short) 0, sigBuffer, (short) 14, (short) 14)) != (byte) 0) {
-//            return "Signature invalid";
-//        }
-//
-//        short amount = (short) consumeAmount;
-//
-//        if (amount > CONSUME_LIMIT){
-//            return "Requested amount larger than maximum value";
-//        }
-//        else if (petrolQuota - amount < 0){
-//            return "Insufficient petrol credits left";
-//        }
-//
-//        short targetAmount = (short) (petrolQuota - amount);
-//        incNonce(nonceC); //sequence nr + 2
-//        nonceT = nonceC;
-//
-//        byte[] dataBuffer = new byte[16];
-//        System.arraycopy(cardID, 0, dataBuffer, 0, 4);
-//        Util.setShort(dataBuffer, (short) 4, targetAmount);
-//        System.arraycopy(nonceT, 0, dataBuffer, 6, NONCET_LENGTH);
-//        Util.setShort(dataBuffer, (short) 14, (short) 0);
-//
-//
-//
-//        AESCipher.init(skey, Cipher.MODE_ENCRYPT);
-//        AESCipher.doFinal(dataBuffer, (short) 0, (short) 16, sigBuffer, (short) 6);
-//
-//        CommandAPDU cons2Command = new CommandAPDU((int) PRFE_CLA, (int) CONS_INS, (int) T_TYPE, (int) T_SOFT_VERSION, sigBuffer);
-//
-//        ResponseAPDU response2;
-//        try {
-//            response2 = applet.transmit(cons2Command);
-//        } catch (CardException e) {
-//            System.out.println(e);
-//            return "Transmit error";
-//        }
-//        incNonce(nonceT); //sequence nr + 3
-//        nonceC = nonceT;
-//        incNonce(nonceC); //sequence nr + 4
-//        nonceT = nonceC;
-//        byte[] responseData = response2.getData();
-//        if(responseData[0] == (byte) 0){
-//            short remainingPetrolQuota = getGasUsed(amount, petrolQuota);
-//            if(remainingPetrolQuota < targetAmount){
-//
-//                short updatedQuota = (short) (targetAmount - remainingPetrolQuota);
-//
-//                System.arraycopy(cardID, 0, dataBuffer, 0, 4);
-//                Util.setShort(dataBuffer, (short) 4,  updatedQuota);
-//                System.arraycopy(nonceT, 0, dataBuffer, 6, NONCET_LENGTH);
-//                Util.setShort(dataBuffer, (short) 14, (short) 0);
-//
-//
-//                AESCipher.init(skey, Cipher.MODE_ENCRYPT);
-//                AESCipher.doFinal(dataBuffer, (short) 0, (short) 16, sigBuffer, (short) 6);
-//
-//                CommandAPDU cons3Command = new CommandAPDU((int) PRFE_CLA, (int) CONS_INS, (int) T_TYPE, (int)T_SOFT_VERSION, sigBuffer);
-//
-//                ResponseAPDU response3;
-//                try {
-//
-//                    response3 = applet.transmit(cons3Command);
-//                } catch (CardException e) {
-//                    System.out.println(e);
-//                    return "Transmit error";
-//                }
-//            }
-//        }
-
- */
+        resetConnection();
         return "Successful transaction";
     };
 
 
     short getGasUsed(short amount, short remainingPetrolQuota){
         short temporaryQuota = remainingPetrolQuota;
-        for(int i = 0; i < amount; i++){
+        for(int i = 0; i < amount - 5; i++){ // not all is used (simulated), hence the -5
             System.out.print("Dispensing petrol....");
             temporaryQuota -= 1; //reduce the remaining quota by 1, one step at a time, this should eventually equal
             // petrolQuota - amount, if not then we deal with this in terminal
