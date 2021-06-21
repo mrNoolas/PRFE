@@ -915,9 +915,9 @@ public class CardApplet extends Applet implements ISO7816 {
         MessageDigest md = MessageDigest.getInstance(MessageDigest.ALG_SHA, false); // TODO: hash algorithm? SHA-1 gives 20-bytes?
         md.doFinal(sigBuffer, (short) 0, (short) 14, sigBuffer, (short) 0);
 
-        //construct mac and sign data
-        signature.init(skey, Signature.MODE_SIGN);
-        signature.sign(sigBuffer, (short) 0, (short) 20, sigBuffer, (short) 0);
+        //construct sign data
+        AESCipher.init(skey, Cipher.MODE_ENCRYPT);
+        AESCipher.doFinal(sigBuffer, (short) 0, (short) 20, sigBuffer, (short) 0);
 
         short expectedLength = apdu.setOutgoing();
 
@@ -962,12 +962,11 @@ public class CardApplet extends Applet implements ISO7816 {
         Util.setShort(sigBuffer, (short) 4, incomingPetrolQuota);
         Util.arrayCopyNonAtomic(buffer, (short) 6, nonceT, (short) 0, (short) NONCE_LENGTH);
 
-        signature.init(skey, Signature.MODE_VERIFY);
-        boolean verified = signature.verify(sigBuffer, (short) 0, (short) 14, buffer, (short) 6, (short) 16);
-        byte verifyByte = (byte) 0;
+        AESCipher.init(skey, Cipher.MODE_DECRYPT);
+        AESCipher.doFinal(buffer, (short) 0, buffer, (short) 0, (short) 14);
+        byte verifyByte = Util.arrayCompare(buffer, (short) 0, sigBuffer, (short) 0, (short) 14);
         //if verified, we update the petrolcredits on the card, otherwise we skip this step
-        if (verified = true){
-            verifyByte = (byte) 1;
+        if (verifyByte = 0){
             petrolCredits = (short) (petrolCredits - incomingPetrolQuota);
         }
 
@@ -983,8 +982,8 @@ public class CardApplet extends Applet implements ISO7816 {
         md.doFinal(sigBuffer, (short) 0, (short) 13, sigBuffer, (short) 0);
 
         //sign hashed data
-        signature.init(skey, Signature.MODE_SIGN);
-        signature.sign(sigBuffer, (short) 0, (short) 20, sigBuffer, (short) 0);
+        AESCipher.init(skey, Signature.MODE_ENCRYPT);
+        AESCipher.doFinal(sigBuffer, (short) 0, (short) 20, sigBuffer, (short) 0);
 
         //verified = 1 byte, signature = 56?
         short expectedLength = apdu.setOutgoing();
@@ -1023,10 +1022,11 @@ public class CardApplet extends Applet implements ISO7816 {
         Util.setShort(sigBuffer, (short) 4, incomingPetrolQuota); //set incoming petrol credit value
         Util.arrayCopyNonAtomic(buffer, (short) 6, nonceT, (short) 0, (short) NONCE_LENGTH); //sequence number
 
-        signature.init(skey, Signature.MODE_VERIFY);
-        boolean verified = signature.verify(sigBuffer, (short) 0, (short) 14, buffer, (short) 6, (short) SIGN_LENGTH);
+        AESCipher.init(skey, Signature.MODE_DECRYPT);
+        AESCipher.doFinal(buffer, (short) 6, buffer, (short) 6, (short) 14);
+        byte verified = Util.arrayCompare(sigBuffer, (short) 0, buffer, (short) 6, (short) 14);
 
-        if(verified){
+        if(verified = (byte) 0){
             if ((short) incomingPetrolQuota < (short) petrolCredits){
                 petrolCredits = (short) (petrolCredits + incomingPetrolQuota);
             }
@@ -1042,26 +1042,26 @@ public class CardApplet extends Applet implements ISO7816 {
 
 
             Util.arrayCopy(cID, (short) 0, sigBuffer, (short) 0, (short) 4);
-            Util.arrayCopy(TCert, (short) 0, sigBuffer, (short) 4, (short) 16); //TODO: TCert length
+            Util.arrayCopy(TCert, (short) 0, sigBuffer, (short) 4, (short) SIGN_LENGTH); //TODO: TCert length
             //   Util.setShort(sigBuffer, (short) 20, petrolCredits);
-            sigBuffer[(short) 20] = (byte) (petrolCredits & 0xff);
-            sigBuffer[(short) 21] = (byte) ((petrolCredits >> 8) & 0xff);
+            sigBuffer[(short) 60] = (byte) (petrolCredits & 0xff);
+            sigBuffer[(short) 61] = (byte) ((petrolCredits >> 8) & 0xff);
             tNum = (short) (tNum + 1);
             //Util.setShort(sigBuffer, (short) 22, tNum);
-            sigBuffer[(short) 22] = (byte) (tNum & 0xff);
-            sigBuffer[(short) 23] = (byte) ((tNum >> 8) & 0xff);
+            sigBuffer[(short) 62] = (byte) (tNum & 0xff);
+            sigBuffer[(short) 63] = (byte) ((tNum >> 8) & 0xff);
 
-            signature.init(skey, Signature.MODE_SIGN);
-            signature.sign(sigBuffer, (short) 0, (short) 24, buffer, (short) 0);
+            AESCipher.init(skey, Cipher.MODE_ENCRYPT);
+            AESCipher.doFinal(sigBuffer, (short) 0, (short) 64, buffer, (short) 0);
 
-            signature.sign(nonceT, (short) 0, NONCE_LENGTH, buffer, SIGN_LENGTH);
+            AESCipher.doFinal(nonceT, (short) 0, (short) NONCE_LENGTH, buffer, (short) SIGN_LENGTH);
 
             apdu.setOutgoingAndSend((short) 0, (short) CONS3_RESP_LEN);
             status[(short) 0] = (byte) (status[(short) 0] - 0x20);
 
         }
 
-        if(!verified){
+        if(verified != (byte) 0){
             select();
             ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
         }
