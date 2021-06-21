@@ -178,7 +178,7 @@ public class TCons extends PRFETerminal {
                     case "Consume":
                         //consumeQuota();
                         setText(consumeQuota());
-                        resetSession();
+                      //  resetSession();
                         break;
                     case "Revoke":
                         setText(revoke(T_TYPE, T_SOFT_VERSION));
@@ -200,55 +200,46 @@ public class TCons extends PRFETerminal {
 
    public String consumeQuota(){                                                        //use an amount of petrol quota on the card
         //send sequence number to card to start the consumption transaction
-        byte[] sigBuffer = new byte[112];
-        String nonceString = Arrays.toString(nonceT);
-        System.out.println(nonceString);
+       byte[] sigBuffer = new byte[112];
 
-        try {
-            AESCipher.init(skey, Cipher.MODE_ENCRYPT);
-            AESCipher.update(nonceC, (short) 0, (short) 8, sigBuffer, (short) 0);
-            AESCipher.doFinal(nonceT, (short) 0, (short) 8, sigBuffer, (short) 8);
-        }catch (Exception e) {
-            e.printStackTrace();
-        }
+       System.arraycopy(nonceT, 0, sigBuffer, 0, 8);
+       System.arraycopy(nonceT, 0, sigBuffer, 8, 8);
+       AESCipher.init(skey, Cipher.MODE_ENCRYPT);
+       AESCipher.doFinal(sigBuffer, (short) 0, (short) 16, sigBuffer, (short) 0);
 
-        CommandAPDU consumeCommand = new CommandAPDU(PRFE_CLA, CONS_INS, T_TYPE, T_SOFT_VERSION, sigBuffer);
+       CommandAPDU consumeCommand = new CommandAPDU((int) PRFE_CLA, (int) CONS_INS, (int)T_TYPE, (int)T_SOFT_VERSION, sigBuffer);
+       ResponseAPDU response;
+       try {
+           response = applet.transmit(consumeCommand);
+       } catch (CardException e) {
+           return "Transmission error";
+       }
 
-
-        ResponseAPDU response = null;
-        try {
-            //card sends back apdu with the data after transmitting the commandAPDU to the card
-            response = applet.transmit(consumeCommand);
-        } catch (CardException e) {
-            // TODO: do something with the exception
-            System.out.println(e);
-            return "Transmit error";
-        }
-
-        //verify response
-        System.out.println(response.getNr()); //the card isnt sending any data in the response because this value returns 0
         byte[] data = response.getData();
+        System.out.println(response.getNr()); //card successfully returns 64 bits of data now
 
-        //data = card-id, quota, signedData
-        byte[] cardID = new byte[4];
-        Util.arrayCopy(data, (short) 0, cardID, (short) 0, (short) 4);
-        short petrolQuotaOnCard = Util.getShort(data, (short) 4);
-        incNonce(nonceT); //sequence nr + 1
-        nonceC = nonceT;
+       System.arraycopy(data, 0, cardID, 0, 4);
+       System.out.println(Arrays.toString(cardID));
 
+       short petrolQuotaOnCard = Util.getShort(data, (short) 4);
+       System.out.println(petrolQuotaOnCard);
 
-        System.arraycopy(cardID, 0, sigBuffer, 0, 4);
-        Util.setShort(sigBuffer, (short) 4, petrolQuotaOnCard);
-        System.arraycopy(nonceC, 0, sigBuffer, 6, NONCET_LENGTH);
-        Util.setShort(sigBuffer, (short) 14, (short) 0); //make data 16 bytes, could also use tnum?
+       short tNum = Util.getShort(data, (short) 6);
+       System.out.println(tNum);
 
-        AESCipher.init(skey, Cipher.MODE_DECRYPT);
-        AESCipher.doFinal(data, (short) 6, (short) SIGN_LENGTH, sigBuffer, (short) 16);
-        if ((Util.arrayCompare(sigBuffer, (short) 0, sigBuffer, (short) 14, (short) 14)) != (byte) 0) {
-            return "Signature invalid";
-        }
+       signature.init(Card.getPublic(), Signature.MODE_VERIFY);
+       signature.update(data, (short) 0, (short) 8);
+       incNonce(nonceT);
+       System.out.println("hello"); // everything up to this point works for the consumption, only the signature does not verify so it will not run the rest.
 
-        short amount = (short) consumeAmount;
+//       if(!signature.verify(nonceT, (short) 0, (short) 8, data, (short) 0, (short) 56)) {
+//          // resetConnection();
+//           return "Consumption failed, sig invalid";
+//       }
+
+       short amount = (short) consumeAmount;
+       System.out.println(amount);
+
 
         if (amount > CONSUME_LIMIT){
             return "Requested amount larger than maximum value";
@@ -256,63 +247,137 @@ public class TCons extends PRFETerminal {
         else if (petrolQuotaOnCard - amount < 0){
             return "Insufficient petrol credits left";
         }
+       short wantedPetrol = (short) (petrolQuotaOnCard - amount);
 
-        short wantedPetrol = (short) (petrolQuotaOnCard - amount);
-        incNonce(nonceC); //sequence nr + 2
-        nonceT = nonceC;
+       data[4] = (byte) (wantedPetrol & 0xff);
+       data[5] = (byte) ((wantedPetrol >> 8) & 0xff);
 
-        byte[] dataBuffer = new byte[16];
-        System.arraycopy(cardID, 0, dataBuffer, 0, 4);
-        Util.setShort(dataBuffer, (short) 4, wantedPetrol);
-        System.arraycopy(nonceT, 0, dataBuffer, 6, NONCET_LENGTH);
-        Util.setShort(dataBuffer, (short) 14, (short) 0);
+       data[6] = (byte) (tNum & 0xff);
+       data[7] = (byte) ((tNum >> 8) & 0xff);
+       incNonce(nonceT);
 
+       System.arraycopy(nonceT, 0, data, 8, 8);
+       signature.init(TCons.getPrivate(), Signature.MODE_SIGN);
+       signature.sign(data, (short) 0, (short) 16, data, (short) 8);
 
+       consumeCommand = new CommandAPDU((int) PRFE_CLA, (int) CONS_INS, (int) T_TYPE, (int)T_SOFT_VERSION, data);
+       try {
+           response = applet.transmit(consumeCommand);
+       } catch (CardException e) {
+           return "Charging error";
+       }
 
-        AESCipher.init(skey, Cipher.MODE_ENCRYPT);
-        AESCipher.doFinal(dataBuffer, (short) 0, (short) 16, sigBuffer, (short) 6);
+       data = response.getData();
+       System.out.println(response.getNr());
+       incNonce(nonceT);
 
-        CommandAPDU cons2Command = new CommandAPDU((int) PRFE_CLA, (int) CONS_INS, (int) T_TYPE, (int) T_SOFT_VERSION, sigBuffer);
+       if(data[0] == (byte) 0) {
+           short remainingPetrolQuota = getGasUsed(amount, petrolQuotaOnCard);
+           if (remainingPetrolQuota < wantedPetrol) {
 
-        ResponseAPDU response2;
-        try {
-            response2 = applet.transmit(cons2Command);
-        } catch (CardException e) {
-            System.out.println(e);
-            return "Transmit error";
-        }
-        incNonce(nonceT); //sequence nr + 3
-        nonceC = nonceT;
-        incNonce(nonceC); //sequence nr + 4
-        nonceT = nonceC;
-        byte[] responseData = response2.getData();
-        if(responseData[0] == (byte) 0){
-            short remainingPetrolQuota = getGasUsed(amount, petrolQuotaOnCard);
-            if(remainingPetrolQuota < wantedPetrol){
-
-                short updatedQuota = (short) (wantedPetrol - remainingPetrolQuota);
-
-                System.arraycopy(cardID, 0, dataBuffer, 0, 4);
-                Util.setShort(dataBuffer, (short) 4,  updatedQuota);
-                System.arraycopy(nonceT, 0, dataBuffer, 6, NONCET_LENGTH);
-                Util.setShort(dataBuffer, (short) 14, (short) 0);
+               short updatedQuota = (short) (wantedPetrol - remainingPetrolQuota);
 
 
-                AESCipher.init(skey, Cipher.MODE_ENCRYPT);
-                AESCipher.doFinal(dataBuffer, (short) 0, (short) 16, sigBuffer, (short) 6);
+               System.arraycopy(cardID, 0, sigBuffer, 0, 4);
+               Util.setShort(sigBuffer, (short) 4, updatedQuota);
+               System.arraycopy(nonceT, 0, sigBuffer, 6, NONCET_LENGTH);
+               Util.setShort(sigBuffer, (short) 14, tNum);
 
-                CommandAPDU cons3Command = new CommandAPDU((int) PRFE_CLA, (int) CONS_INS, (int) T_TYPE, (int)T_SOFT_VERSION, sigBuffer);
 
-                ResponseAPDU response3;
-                try {
+               AESCipher.init(skey, Cipher.MODE_ENCRYPT);
+               AESCipher.doFinal(sigBuffer, (short) 0, (short) 16, sigBuffer, (short) 6);
 
-                    response3 = applet.transmit(cons3Command);
-                } catch (CardException e) {
-                    System.out.println(e);
-                    return "Transmit error";
-                }
-            }
-        }
+               CommandAPDU cons3Command = new CommandAPDU((int) PRFE_CLA, (int) CONS_INS, (int) T_TYPE, (int) T_SOFT_VERSION, sigBuffer);
+
+               ResponseAPDU response3;
+               try {
+
+                   response3 = applet.transmit(cons3Command);
+               } catch (CardException e) {
+                   System.out.println(e);
+                   return "Transmit error";
+               }
+           }
+       }
+
+
+
+//        System.arraycopy(cardID, 0, sigBuffer, 0, 4);
+//        Util.setShort(sigBuffer, (short) 4, petrolQuotaOnCard);
+//        System.arraycopy(nonceC, 0, sigBuffer, 6, NONCET_LENGTH);
+//        Util.setShort(sigBuffer, (short) 14, (short) 0); //make data 16 bytes, could also use tnum?
+//
+//        AESCipher.init(skey, Cipher.MODE_DECRYPT);
+//        AESCipher.doFinal(data, (short) 6, (short) SIGN_LENGTH, sigBuffer, (short) 16);
+//        if ((Util.arrayCompare(sigBuffer, (short) 0, sigBuffer, (short) 14, (short) 14)) != (byte) 0) {
+//            return "Signature invalid";
+//        }
+//
+//        short amount = (short) consumeAmount;
+//
+//        if (amount > CONSUME_LIMIT){
+//            return "Requested amount larger than maximum value";
+//        }
+//        else if (petrolQuotaOnCard - amount < 0){
+//            return "Insufficient petrol credits left";
+//        }
+//
+//        short wantedPetrol = (short) (petrolQuotaOnCard - amount);
+//        incNonce(nonceC); //sequence nr + 2
+//        nonceT = nonceC;
+//
+//        byte[] dataBuffer = new byte[16];
+//        System.arraycopy(cardID, 0, dataBuffer, 0, 4);
+//        Util.setShort(dataBuffer, (short) 4, wantedPetrol);
+//        System.arraycopy(nonceT, 0, dataBuffer, 6, NONCET_LENGTH);
+//        Util.setShort(dataBuffer, (short) 14, (short) 0);
+//
+//
+//
+//        AESCipher.init(skey, Cipher.MODE_ENCRYPT);
+//        AESCipher.doFinal(dataBuffer, (short) 0, (short) 16, sigBuffer, (short) 6);
+//
+//        CommandAPDU cons2Command = new CommandAPDU((int) PRFE_CLA, (int) CONS_INS, (int) T_TYPE, (int) T_SOFT_VERSION, sigBuffer);
+//
+//        ResponseAPDU response2;
+//        try {
+//            response2 = applet.transmit(cons2Command);
+//        } catch (CardException e) {
+//            System.out.println(e);
+//            return "Transmit error";
+//        }
+//        incNonce(nonceT); //sequence nr + 3
+//        nonceC = nonceT;
+//        incNonce(nonceC); //sequence nr + 4
+//        nonceT = nonceC;
+//        byte[] responseData = response2.getData();
+//        if(responseData[0] == (byte) 0){
+//            short remainingPetrolQuota = getGasUsed(amount, petrolQuotaOnCard);
+//            if(remainingPetrolQuota < wantedPetrol){
+//
+//                short updatedQuota = (short) (wantedPetrol - remainingPetrolQuota);
+//
+//                System.arraycopy(cardID, 0, dataBuffer, 0, 4);
+//                Util.setShort(dataBuffer, (short) 4,  updatedQuota);
+//                System.arraycopy(nonceT, 0, dataBuffer, 6, NONCET_LENGTH);
+//                Util.setShort(dataBuffer, (short) 14, (short) 0);
+//
+//
+//                AESCipher.init(skey, Cipher.MODE_ENCRYPT);
+//                AESCipher.doFinal(dataBuffer, (short) 0, (short) 16, sigBuffer, (short) 6);
+//
+//                CommandAPDU cons3Command = new CommandAPDU((int) PRFE_CLA, (int) CONS_INS, (int) T_TYPE, (int)T_SOFT_VERSION, sigBuffer);
+//
+//                ResponseAPDU response3;
+//                try {
+//
+//                    response3 = applet.transmit(cons3Command);
+//                } catch (CardException e) {
+//                    System.out.println(e);
+//                    return "Transmit error";
+//                }
+//            }
+//        }
         return "Successful transaction";
     };
 

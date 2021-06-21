@@ -31,8 +31,8 @@ public class CardApplet extends Applet implements ISO7816 {
 
     private static final short CHAR1_INC_LEN = 56;
     private static final short CHAR2_INC_LEN = 64;
-    private static final short CONS1_INC_LENGTH = 16;
-    private static final short CONS2_INC_LENGTH = 22;
+    private static final short CONS1_INC_LENGTH = 56;
+    private static final short CONS2_INC_LENGTH = 64;
     private static final short CONS3_INC_LENGTH = 22;
 
     // Response lenghts
@@ -41,9 +41,9 @@ public class CardApplet extends Applet implements ISO7816 {
 
     private static final short CHAR1_RESP_LEN = 64;
     private static final short CHAR2_RESP_LEN = 112;
-    private static final short CONS1_RESP_LEN = 22; //TODO: change outgoing length of messages
-    private static final short CONS2_RESP_LEN = 22;
-    private static final short CONS3_RESP_LEN = 32;
+    private static final short CONS1_RESP_LEN = 64; //TODO: change outgoing length of messages
+    private static final short CONS2_RESP_LEN = 112;
+    private static final short CONS3_RESP_LEN = 112;
 
     // keys
     private AESKey skey;
@@ -173,7 +173,7 @@ public class CardApplet extends Applet implements ISO7816 {
 
         select(); // Reset status and tInfo
 
-        petrolCredits = (short) 1;
+        petrolCredits = (short) 100;
         short incomingPetrolQuota = (short) 0;
 
         register();
@@ -848,10 +848,10 @@ public class CardApplet extends Applet implements ISO7816 {
 
         switch (status[(short) 0] & 0xf0) {
             case 0x00:
-                //consumePhase1(apdu, buffer);
+                consumePhase1(apdu, buffer);
                 break;
             case 0x10:
-                //consumePhase2(apdu, buffer);
+                consumePhase2(apdu, buffer);
                 break;
             case 0x20:
                 //consumePhase3(apdu, buffer);
@@ -866,192 +866,209 @@ public class CardApplet extends Applet implements ISO7816 {
     private void consumePhase1(APDU apdu, byte[] buffer) {
 
         short lc_length = apdu.setIncomingAndReceive();
+
         if (lc_length < (byte) CONS1_INC_LENGTH) {
             ISOException.throwIt((short) (SW_WRONG_LENGTH | CONS1_INC_LENGTH));
         }
 
         buffer = apdu.getBuffer();
 
-
-
-        // Decrypt into nonceT
         AESCipher.init(skey, Cipher.MODE_DECRYPT);
-        AESCipher.doFinal(buffer, (short) 0, (short) 8, nonceT, (short) 0);
+        AESCipher.doFinal(buffer, (short) 0, (short) 16, buffer, (short) 0);
+        Util.arrayCopyNonAtomic(buffer, (short) 0, nonceT, (short) 0, (short) 8);
 
-        //card sends back to the terminal:
-        //card-id (4 bytes), petrolcredits (short), tnum, mac(hash{card-id, petrolCredits, incNonce(nonceT)}, skey -> signature length?
-
-
-        incNonce(nonceT); //sequence nr + 1
-        nonceC = nonceT;
+        incNonce(nonceT);
         tNum = (short) (tNum + 1);
-        //hashedData = hash(card-id, petrolCredits, nonceC) -> hashing algorithm? SHA-1?
 
-        //copy data to be hashed into sigbuffer
-        signature.init(puks, Signature.MODE_VERIFY);
-        signature.update(cID, (short) 0, ID_LENGTH);
-        //Util.arrayCopyNonAtomic(cID, (short) 0, sigBuffer, (short) 0, (short) 4);
-        signature.update(petrolCredits);
-        //Util.setShort(sigBuffer, (short) 4, petrolCredits);
-        signature.update(nonceT);
-        //Util.arrayCopyNonAtomic(nonceT, (short) 0, sigBuffer, (short) 6, (short) NONCE_LENGTH);
-        signature.update(tNum);
-        //Util.setShort(sigBuffer, (short) 14, tNum);
+        apdu.setOutgoing();
 
-      //  //hash the data with hashing algorithm
-//        MessageDigest md = MessageDigest.getInstance(MessageDigest.ALG_SHA, false); // TODO: hash algorithm? SHA-1 gives 20-bytes?
-//        md.doFinal(sigBuffer, (short) 0, (short) 14, sigBuffer, (short) 0);
-
-        //construct sign data
-        AESCipher.init(skey, Cipher.MODE_ENCRYPT);
-        AESCipher.doFinal(sigBuffer, (short) 0, (short) 16, sigBuffer, (short) 0);
-
-        short expectedLength = apdu.setOutgoing();
-
-        if (expectedLength < (short) CONS1_RESP_LEN) ISOException.throwIt((short) (SW_WRONG_LENGTH | CONS1_RESP_LEN));
-
-        // Return answer with the given data:
         apdu.setOutgoingLength((byte) CONS1_RESP_LEN);
 
-        // buffer[(short) 0] = (byte) CARD_TYPE;
-        // buffer[(short) 1] = (byte) CARD_SOFTWARE_VERSION;
         Util.arrayCopyNonAtomic(cID, (short) 0, buffer, (short) 0, (short) 4);
-        Util.setShort(buffer, (short) 4, petrolCredits);
-        Util.arrayCopyNonAtomic(sigBuffer, (short) 0, buffer, (short) 6, (short) SIGN_LENGTH);
+        buffer[(short) 4] = (byte) (petrolCredits & 0xff);
+        buffer[(short) 5] = (byte) ((petrolCredits >> 8) & 0xff);
 
-        apdu.sendBytes((short) 0, (short) CONS1_RESP_LEN);
+        buffer[(short) 6] = (byte) (tNum & 0xff);
+        buffer[(short) 7] = (byte) ((tNum >> 8) & 0xff);
+        Util.arrayCopyNonAtomic(nonceT, (short) 0, buffer, (short) 8, (short) NONCE_LENGTH);
+        // hash the data?
+        signature.init(prkc, Signature.MODE_SIGN);
+        signature.sign(buffer, (short) 0, (short) 16, buffer, (short) 8);
+
+        //send data to terminal and set status
         status[(short) 0] = (byte) (status[(short) 0] + 0x10);
+        apdu.sendBytes((short) 0, (short) CONS1_RESP_LEN);
 
     }
 
     private void consumePhase2(APDU apdu, byte[] buffer){
 
         short lc_length = apdu.setIncomingAndReceive();
-        if (lc_length < (byte) CONS2_INC_LENGTH) {
-            ISOException.throwIt((short) (SW_WRONG_LENGTH | CONS2_INC_LENGTH));
+        if (lc_length < (byte) CHAR2_INC_LEN) {
+            ISOException.throwIt((short) (SW_WRONG_LENGTH | CHAR2_INC_LEN));
         }
 
         buffer = apdu.getBuffer();
+        short incomingQuota = (short) (buffer[(short) 5]);
+        incomingQuota = (short) (buffer[(short) 6]<< 8);
 
-        incNonce(nonceC);
-        nonceT = nonceC; //we dont send nonceT in the response from terminal, so increment it here (sequence nr + 2)
+
+        signature.init(pukTCons, Signature.MODE_VERIFY);
+
+
         incNonce(nonceT);
-        nonceC = nonceT; // sequence nr + 3
+        //cardid, new-quota, nonceT needs to be verified
 
 
-        //offset in data buffer for the signature is 6 (card id and quota precede it)
-        //data to verify is: cardID, nonceT, incomingPetrolQuota = 4, 8, 2 = 14 bytes
+        if(!signature.verify(buffer, (short) 0, (short) 8, buffer, (short) 8, SIGN_LENGTH)) {
+            ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
 
-        incomingPetrolQuota = (short) (incomingPetrolQuota + buffer[(short) 5]);
-        incomingPetrolQuota = (short) (incomingPetrolQuota + (buffer[(short) 6]) << 8);
 
-        Util.arrayCopyNonAtomic(buffer, (short) 0, sigBuffer, (short) 0, (short) 4);
-        Util.setShort(sigBuffer, (short) 4, incomingPetrolQuota);
-        Util.arrayCopyNonAtomic(buffer, (short) 6, nonceT, (short) 0, (short) NONCE_LENGTH);
-
-        AESCipher.init(skey, Cipher.MODE_DECRYPT);
-        AESCipher.doFinal(buffer, (short) 0, (short) 14, buffer, (short) 0);
-        byte verifyByte = Util.arrayCompare(buffer, (short) 0, sigBuffer, (short) 0, (short) 14);
-        //if verified, we update the petrolcredits on the card, otherwise we skip this step
-        if (verifyByte == 0){
-            petrolCredits = (short) (petrolCredits - incomingPetrolQuota);
         }
 
 
-        //send response to terminal with: verified, mac(hash{card-id, verified, nonceC}, skey)
-        //hash the data to send
 
-        Util.arrayCopyNonAtomic(cID, (short) 0, sigBuffer, (short) 0, (short) 4);
-        sigBuffer[(short) 4] = verifyByte;
-        Util.arrayCopyNonAtomic(nonceC, (short) 0, sigBuffer, (short) 5, (short) NONCE_LENGTH);
-
-        MessageDigest md = MessageDigest.getInstance(MessageDigest.ALG_SHA, false);
-        md.doFinal(sigBuffer, (short) 0, (short) 13, sigBuffer, (short) 0);
-
-        //sign hashed data
-        AESCipher.init(skey, Cipher.MODE_ENCRYPT);
-        AESCipher.doFinal(sigBuffer, (short) 0, (short) 20, sigBuffer, (short) 0);
-
-        //verified = 1 byte, signature = 56?
         short expectedLength = apdu.setOutgoing();
-
         if (expectedLength < (short) CONS2_RESP_LEN) ISOException.throwIt((short) (SW_WRONG_LENGTH | CONS2_RESP_LEN));
-
-        // Return answer with the given data:
         apdu.setOutgoingLength((byte) CONS2_RESP_LEN);
 
-        //  buffer[(short) 0] = (byte) CARD_TYPE;
-        //  buffer[(short) 1] = (byte) CARD_SOFTWARE_VERSION;
-        buffer[(short) 0] = verifyByte;
-        Util.arrayCopyNonAtomic(sigBuffer, (short) 0, buffer, (short) 1, (short) SIGN_LENGTH);  //TODO: change signature length
+        signature.init(prkc, Signature.MODE_SIGN);
+        signature.update(cID, (short) 0, (short) 4); //sign: cardid, byte indicating that the prev message was verified and nonceT
+        signature.update(nonceT, (short) 5, (short) 8);
 
-        apdu.sendBytes((short) 0, (short) CONS2_RESP_LEN);
+
+        incNonce(nonceT);
+
         status[(short) 0] = (byte) (status[(short) 0] + 0x20);
+        apdu.setOutgoingAndSend((short) 0, (short) CONS2_RESP_LEN);
+
+
+//        short lc_length = apdu.setIncomingAndReceive();
+//        if (lc_length < (byte) CONS2_INC_LENGTH) {
+//            ISOException.throwIt((short) (SW_WRONG_LENGTH | CONS2_INC_LENGTH));
+//        }
+//
+//        buffer = apdu.getBuffer();
+//
+//        incNonce(nonceC);
+//        nonceT = nonceC; //we dont send nonceT in the response from terminal, so increment it here (sequence nr + 2)
+//        incNonce(nonceT);
+//        nonceC = nonceT; // sequence nr + 3
+//
+//
+//        //offset in data buffer for the signature is 6 (card id and quota precede it)
+//        //data to verify is: cardID, nonceT, incomingPetrolQuota = 4, 8, 2 = 14 bytes
+//
+//        incomingPetrolQuota = (short) (incomingPetrolQuota + buffer[(short) 5]);
+//        incomingPetrolQuota = (short) (incomingPetrolQuota + (buffer[(short) 6]) << 8);
+//
+//        Util.arrayCopyNonAtomic(buffer, (short) 0, sigBuffer, (short) 0, (short) 4);
+//        Util.setShort(sigBuffer, (short) 4, incomingPetrolQuota);
+//        Util.arrayCopyNonAtomic(buffer, (short) 6, nonceT, (short) 0, (short) NONCE_LENGTH);
+//
+//        AESCipher.init(skey, Cipher.MODE_DECRYPT);
+//        AESCipher.doFinal(buffer, (short) 0, (short) 14, buffer, (short) 0);
+//        byte verifyByte = Util.arrayCompare(buffer, (short) 0, sigBuffer, (short) 0, (short) 14);
+//        //if verified, we update the petrolcredits on the card, otherwise we skip this step
+//        if (verifyByte == 0){
+//            petrolCredits = (short) (petrolCredits - incomingPetrolQuota);
+//        }
+//
+//
+//        //send response to terminal with: verified, mac(hash{card-id, verified, nonceC}, skey)
+//        //hash the data to send
+//
+//        Util.arrayCopyNonAtomic(cID, (short) 0, sigBuffer, (short) 0, (short) 4);
+//        sigBuffer[(short) 4] = verifyByte;
+//        Util.arrayCopyNonAtomic(nonceC, (short) 0, sigBuffer, (short) 5, (short) NONCE_LENGTH);
+//
+//        MessageDigest md = MessageDigest.getInstance(MessageDigest.ALG_SHA, false);
+//        md.doFinal(sigBuffer, (short) 0, (short) 13, sigBuffer, (short) 0);
+//
+//        //sign hashed data
+//        AESCipher.init(skey, Cipher.MODE_ENCRYPT);
+//        AESCipher.doFinal(sigBuffer, (short) 0, (short) 20, sigBuffer, (short) 0);
+//
+//        //verified = 1 byte, signature = 56?
+//        short expectedLength = apdu.setOutgoing();
+//
+//        if (expectedLength < (short) CONS2_RESP_LEN) ISOException.throwIt((short) (SW_WRONG_LENGTH | CONS2_RESP_LEN));
+//
+//        // Return answer with the given data:
+//        apdu.setOutgoingLength((byte) CONS2_RESP_LEN);
+//
+//        //  buffer[(short) 0] = (byte) CARD_TYPE;
+//        //  buffer[(short) 1] = (byte) CARD_SOFTWARE_VERSION;
+//        buffer[(short) 0] = verifyByte;
+//        Util.arrayCopyNonAtomic(sigBuffer, (short) 0, buffer, (short) 1, (short) SIGN_LENGTH);  //TODO: change signature length
+//
+//        apdu.sendBytes((short) 0, (short) CONS2_RESP_LEN);
+//        status[(short) 0] = (byte) (status[(short) 0] + 0x20);
     }
 
     private void consumePhase3(APDU apdu, byte[] buffer){
 
-        short lc_length = apdu.setIncomingAndReceive();
-        if (lc_length < (byte) CONS3_INC_LENGTH) {
-            ISOException.throwIt((short) (SW_WRONG_LENGTH | CONS3_INC_LENGTH));
-        }
+//        short lc_length = apdu.setIncomingAndReceive();
+//        if (lc_length < (byte) CONS3_INC_LENGTH) {
+//            ISOException.throwIt((short) (SW_WRONG_LENGTH | CONS3_INC_LENGTH));
+//        }
+//
+//        buffer = apdu.getBuffer();
+//
+//        incNonce(nonceC);
+//        nonceT = nonceC; //sequence nr + 4
+//        incNonce(nonceT);
+//        nonceC = nonceT; //sequence nr + 5
+//
+//        short incomingPetrolQuota = (short) Util.getShort(buffer, (short) 4); //read the short value after the card-id
+//
+//        Util.arrayCopyNonAtomic(buffer, (short) 0, sigBuffer, (short) 0, (short) 4); //copy card-id
+//        Util.setShort(sigBuffer, (short) 4, incomingPetrolQuota); //set incoming petrol credit value
+//        Util.arrayCopyNonAtomic(buffer, (short) 6, nonceT, (short) 0, (short) NONCE_LENGTH); //sequence number
+//
+//        AESCipher.init(skey, Cipher.MODE_DECRYPT);
+//        AESCipher.doFinal(buffer, (short) 6, (short) 14, buffer, (short) 6);
+//        byte verified = Util.arrayCompare(sigBuffer, (short) 0, buffer, (short) 6, (short) 14);
+//
+//        if(verified == (byte) 0){
+//            if ((short) incomingPetrolQuota < (short) petrolCredits){
+//                petrolCredits = (short) (petrolCredits + incomingPetrolQuota);
+//            }
+//
+//            short expectedLength = apdu.setOutgoing();
+//            if (expectedLength < (short) CONS3_RESP_LEN) ISOException.throwIt((short) (SW_WRONG_LENGTH | CONS3_RESP_LEN));
+//            apdu.setOutgoingLength((byte) CONS3_RESP_LEN);
+//
+//            //send to terminal: two signatures
+//
+//            //mac(hash({card-id, TCert, petrolCredits, transaction_nr}, skey)
+//            //mac({nonceC}, skey)
+//
+//
+//            Util.arrayCopy(cID, (short) 0, sigBuffer, (short) 0, (short) 4);
+//            Util.arrayCopy(TCert, (short) 0, sigBuffer, (short) 4, (short) SIGN_LENGTH); //TODO: TCert length
+//            //   Util.setShort(sigBuffer, (short) 20, petrolCredits);
+//            sigBuffer[(short) 60] = (byte) (petrolCredits & 0xff);
+//            sigBuffer[(short) 61] = (byte) ((petrolCredits >> 8) & 0xff);
+//            tNum = (short) (tNum + 1);
+//            //Util.setShort(sigBuffer, (short) 22, tNum);
+//            sigBuffer[(short) 62] = (byte) (tNum & 0xff);
+//            sigBuffer[(short) 63] = (byte) ((tNum >> 8) & 0xff);
+//
+//            AESCipher.init(skey, Cipher.MODE_ENCRYPT);
+//            AESCipher.doFinal(sigBuffer, (short) 0, (short) 64, buffer, (short) 0);
+//
+//            AESCipher.doFinal(nonceT, (short) 0, (short) NONCE_LENGTH, buffer, (short) SIGN_LENGTH);
+//
+//            apdu.setOutgoingAndSend((short) 0, (short) CONS3_RESP_LEN);
+//            status[(short) 0] = (byte) (status[(short) 0] - 0x20);
 
-        buffer = apdu.getBuffer();
-
-        incNonce(nonceC);
-        nonceT = nonceC; //sequence nr + 4
-        incNonce(nonceT);
-        nonceC = nonceT; //sequence nr + 5
-
-        short incomingPetrolQuota = (short) Util.getShort(buffer, (short) 4); //read the short value after the card-id
-
-        Util.arrayCopyNonAtomic(buffer, (short) 0, sigBuffer, (short) 0, (short) 4); //copy card-id
-        Util.setShort(sigBuffer, (short) 4, incomingPetrolQuota); //set incoming petrol credit value
-        Util.arrayCopyNonAtomic(buffer, (short) 6, nonceT, (short) 0, (short) NONCE_LENGTH); //sequence number
-
-        AESCipher.init(skey, Cipher.MODE_DECRYPT);
-        AESCipher.doFinal(buffer, (short) 6, (short) 14, buffer, (short) 6);
-        byte verified = Util.arrayCompare(sigBuffer, (short) 0, buffer, (short) 6, (short) 14);
-
-        if(verified == (byte) 0){
-            if ((short) incomingPetrolQuota < (short) petrolCredits){
-                petrolCredits = (short) (petrolCredits + incomingPetrolQuota);
-            }
-
-            short expectedLength = apdu.setOutgoing();
-            if (expectedLength < (short) CONS3_RESP_LEN) ISOException.throwIt((short) (SW_WRONG_LENGTH | CONS3_RESP_LEN));
-            apdu.setOutgoingLength((byte) CONS3_RESP_LEN);
-
-            //send to terminal: two signatures
-
-            //mac(hash({card-id, TCert, petrolCredits, transaction_nr}, skey)
-            //mac({nonceC}, skey)
-
-
-            Util.arrayCopy(cID, (short) 0, sigBuffer, (short) 0, (short) 4);
-            Util.arrayCopy(TCert, (short) 0, sigBuffer, (short) 4, (short) SIGN_LENGTH); //TODO: TCert length
-            //   Util.setShort(sigBuffer, (short) 20, petrolCredits);
-            sigBuffer[(short) 60] = (byte) (petrolCredits & 0xff);
-            sigBuffer[(short) 61] = (byte) ((petrolCredits >> 8) & 0xff);
-            tNum = (short) (tNum + 1);
-            //Util.setShort(sigBuffer, (short) 22, tNum);
-            sigBuffer[(short) 62] = (byte) (tNum & 0xff);
-            sigBuffer[(short) 63] = (byte) ((tNum >> 8) & 0xff);
-
-            AESCipher.init(skey, Cipher.MODE_ENCRYPT);
-            AESCipher.doFinal(sigBuffer, (short) 0, (short) 64, buffer, (short) 0);
-
-            AESCipher.doFinal(nonceT, (short) 0, (short) NONCE_LENGTH, buffer, (short) SIGN_LENGTH);
-
-            apdu.setOutgoingAndSend((short) 0, (short) CONS3_RESP_LEN);
-            status[(short) 0] = (byte) (status[(short) 0] - 0x20);
-
-        }
-
-        if(verified != (byte) 0){
-            select();
-            ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
-        }
+//        }
+//
+//        if(verified != (byte) 0){
+//            select();
+//            ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
+//        }
 
     }
 
