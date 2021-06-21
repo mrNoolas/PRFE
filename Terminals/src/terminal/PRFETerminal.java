@@ -72,6 +72,7 @@ public abstract class PRFETerminal extends JPanel implements ActionListener {
     static final byte READ_INS = (byte) 0x00;
     static final byte AUTH_INS = (byte) 0x10;
     static final byte REV_INS = (byte) 0x40;
+    static final byte REKEY_INS = (byte) 0x60;
 
     // length constants
     static final short ID_LENGTH = 4;
@@ -443,6 +444,64 @@ public abstract class PRFETerminal extends JPanel implements ActionListener {
         } else {
             return "Must auth to send rev to the card!";
         }
+    }
+
+    /**
+     * Generates new keys and distributes them to the card. If all rekey parameters are false, no new keys are generated,
+     * but the card is still given a copy of the new keys.
+     * @param rekeyCard
+     * @param rekeyTMan
+     * @param rekeyTChar
+     * @param rekeyTCons
+     * @return text to display to terminal user
+     */
+    public String rekey(boolean rekeyCard, boolean rekeyTMan, boolean rekeyTChar, boolean rekeyTCons) {
+        switchCallback.requestRekey(rekeyCard, rekeyTMan, rekeyTChar, rekeyTCons);
+        byte[] sign = switchCallback.getRekeySignature();
+
+        byte[] buffer = new byte[228];
+        ((ECPublicKey) TMan.getPublic()).getW(buffer, (short) 0);
+        ((ECPublicKey) TChar.getPublic()).getW(buffer, (short) 51);
+        ((ECPublicKey) TCons.getPublic()).getW(buffer, (short) 102);
+        ((ECPublicKey) Card.getPublic()).getW(buffer, (short) 153);
+        ((ECPrivateKey) Card.getPrivate()).getS(buffer, (short) 204);
+
+        CommandAPDU command = new CommandAPDU(PRFE_CLA, REKEY_INS, termType, termSoftVers, sign, 0, 58, 58);
+        ResponseAPDU response;
+        try {
+            //card sends back apdu with the data after transmitting the commandAPDU to the card
+            response = applet.transmit(command);
+        } catch (CardException e) {
+            // TODO: do something with the exception
+            resetConnection();
+            System.out.println(e);
+            return "Transmit Error";
+        }
+
+        byte[] data = response.getData();
+        if (data != sign) {
+            System.out.println("Readback incorrect");
+            return "Readback incorrect for signature"
+        }
+
+        CommandAPDU command = new CommandAPDU(PRFE_CLA, REKEY_INS, termType, termSoftVers, buffer, 0, 228, 0);
+        ResponseAPDU response;
+        try {
+            //card sends back apdu with the data after transmitting the commandAPDU to the card
+            response = applet.transmit(command);
+        } catch (CardException e) {
+            // TODO: do something with the exception
+            resetConnection();
+            System.out.println(e);
+            return "Transmit Error";
+        }
+
+        byte[] data = response.getBytes();
+        if ((data[0] & 0xff) == 0x90 && data[1] == 0) {
+            System.out.println("Rekeyed Succesfully");
+            return "Rekeyed Succesfully";
+        }
+        return "Rekey not accepted by card";
     }
 
     public abstract Dimension getPreferredSize();
