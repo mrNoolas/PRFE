@@ -106,11 +106,11 @@ public class TermSim {
         signature.update(rekeySign, (short) 0, (short) 2);
 
         byte[] buffer = new byte[228];
-        ((ECPublicKey) TMan.getPublic()).getW(buffer, (short) 0);
-        ((ECPublicKey) TChar.getPublic()).getW(buffer, (short) 51);
-        ((ECPublicKey) TCons.getPublic()).getW(buffer, (short) 102);
-        ((ECPublicKey) Card.getPublic()).getW(buffer, (short) 153);
-        ((ECPrivateKey) Card.getPrivate()).getS(buffer, (short) 204);
+        ((ECPublicKey) TManKP.getPublic()).getW(buffer, (short) 0);
+        ((ECPublicKey) TCharKP.getPublic()).getW(buffer, (short) 51);
+        ((ECPublicKey) TConsKP.getPublic()).getW(buffer, (short) 102);
+        ((ECPublicKey) CardKP.getPublic()).getW(buffer, (short) 153);
+        ((ECPrivateKey) CardKP.getPrivate()).getS(buffer, (short) 204);
         signature.sign(buffer, (short) 0, (short) 228, rekeySign, (short) 2);
 
         // Setup Terminals TODO: reduce the keys that are given to each terminal
@@ -288,11 +288,11 @@ public class TermSim {
                 signature.update(rekeySign, (short) 0, (short) 2);
 
                 byte[] buffer = new byte[228];
-                ((ECPublicKey) TMan.getPublic()).getW(buffer, (short) 0);
-                ((ECPublicKey) TChar.getPublic()).getW(buffer, (short) 51);
-                ((ECPublicKey) TCons.getPublic()).getW(buffer, (short) 102);
-                ((ECPublicKey) Card.getPublic()).getW(buffer, (short) 153);
-                ((ECPrivateKey) Card.getPrivate()).getS(buffer, (short) 204);
+                ((ECPublicKey) TManKP.getPublic()).getW(buffer, (short) 0);
+                ((ECPublicKey) TCharKP.getPublic()).getW(buffer, (short) 51);
+                ((ECPublicKey) TConsKP.getPublic()).getW(buffer, (short) 102);
+                ((ECPublicKey) CardKP.getPublic()).getW(buffer, (short) 153);
+                ((ECPrivateKey) CardKP.getPrivate()).getS(buffer, (short) 204);
                 signature.sign(buffer, (short) 0, (short) 228, rekeySign, (short) 2);
             }
 

@@ -201,11 +201,15 @@ public class TCons extends PRFETerminal {
         byte[] nonceT = generateNonce();
         byte[] sigBuffer = new byte[2*SIGN_LENGTH];
 
-        AESCipher.init(skey, Cipher.MODE_ENCRYPT);
-        AESCipher.doFinal(nonceT, (short) 0, (short) 8, sigBuffer, (short) 0);
+        try {
+            AESCipher.init(skey, Cipher.MODE_ENCRYPT);
+            AESCipher.update(nonceC, (short) 0, (short) 8, sigBuffer, (short) 0);
+            AESCipher.doFinal(nonceT, (short) 0, (short) 8, sigBuffer, (short) 8);
+        }catch (Exception e) {
+            e.printStackTrace();
+        }
 
         CommandAPDU consumeCommand = new CommandAPDU(PRFE_CLA, CONS_INS, T_TYPE, T_SOFT_VERSION, sigBuffer);
-
 
         ResponseAPDU response = null;
         try {
@@ -231,7 +235,7 @@ public class TCons extends PRFETerminal {
         System.arraycopy(nonceC, 0, sigBuffer, 6, NONCET_LENGTH);
 
         AESCipher.init(skey, Cipher.MODE_DECRYPT);
-        AESCipher.doFinal(data, (short) 6, (short) SIGN_LENGTH, sigBuffer, (short) 14)
+        AESCipher.doFinal(data, (short) 6, (short) SIGN_LENGTH, sigBuffer, (short) 14);
         if ((Util.arrayCompare(sigBuffer, (short) 0, sigBuffer, (short) 14, (short) 14)) != (byte) 0) {
             return "Signature invalid";
         }

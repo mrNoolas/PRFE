@@ -455,7 +455,7 @@ public abstract class PRFETerminal extends JPanel implements ActionListener {
      * @param rekeyTCons
      * @return text to display to terminal user
      */
-    public String rekey(boolean rekeyCard, boolean rekeyTMan, boolean rekeyTChar, boolean rekeyTCons) {
+    public String rekey(byte termType, byte termSoftVers, boolean rekeyCard, boolean rekeyTMan, boolean rekeyTChar, boolean rekeyTCons) {
         switchCallback.requestRekey(rekeyCard, rekeyTMan, rekeyTChar, rekeyTCons);
         byte[] sign = switchCallback.getRekeySignature();
 
@@ -481,11 +481,10 @@ public abstract class PRFETerminal extends JPanel implements ActionListener {
         byte[] data = response.getData();
         if (data != sign) {
             System.out.println("Readback incorrect");
-            return "Readback incorrect for signature"
+            return "Readback incorrect for signature";
         }
 
-        CommandAPDU command = new CommandAPDU(PRFE_CLA, REKEY_INS, termType, termSoftVers, buffer, 0, 228, 0);
-        ResponseAPDU response;
+        command = new CommandAPDU(PRFE_CLA, REKEY_INS, termType, termSoftVers, buffer, 0, 228, 0);
         try {
             //card sends back apdu with the data after transmitting the commandAPDU to the card
             response = applet.transmit(command);
@@ -496,7 +495,7 @@ public abstract class PRFETerminal extends JPanel implements ActionListener {
             return "Transmit Error";
         }
 
-        byte[] data = response.getBytes();
+        data = response.getBytes();
         if ((data[0] & 0xff) == 0x90 && data[1] == 0) {
             System.out.println("Rekeyed Succesfully");
             return "Rekeyed Succesfully";

@@ -838,20 +838,21 @@ public class CardApplet extends Applet implements ISO7816 {
 
         switch (status[(short) 0] & 0xf0) {
             case 0x00:
-                consumePhase1(apdu, buffer);
+                //consumePhase1(apdu, buffer);
                 break;
             case 0x10:
-                consumePhase2(apdu, buffer);
+                //consumePhase2(apdu, buffer);
                 break;
             case 0x20:
-                consumePhase3(apdu, buffer);
+                //consumePhase3(apdu, buffer);
+                break;
             default:
                 select();
                 ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
                 break;
         }
     }
-
+/*
     private void consumePhase1(APDU apdu, byte[] buffer) {
 
         short lc_length = apdu.setIncomingAndReceive();
@@ -1033,7 +1034,7 @@ public class CardApplet extends Applet implements ISO7816 {
             ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
         }
 
-    }
+    }*/
 
     /**
      * Revokes the validity of the card.
@@ -1055,7 +1056,7 @@ public class CardApplet extends Applet implements ISO7816 {
 
         if (!checkAndCopyTypeAndVersion(buffer)) ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
 
-        lc_length = apdu.setIncomingAndReceive();
+        short lc_length = apdu.setIncomingAndReceive();
         if (lc_length < (byte) REVOKE_INC_LENGTH) {
             ISOException.throwIt((short) (SW_WRONG_LENGTH | REVOKE_INC_LENGTH));
         }
