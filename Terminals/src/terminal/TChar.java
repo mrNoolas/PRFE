@@ -174,10 +174,14 @@ public class TChar extends PRFETerminal {
         display.setBackground(Color.darkGray);
         display.setForeground(Color.green);
         add(display, BorderLayout.NORTH);
-        keypad = new JPanel(new GridLayout(5, 3));
+        keypad = new JPanel(new GridLayout(7, 3));
         key("Read");
         key("Charge");
-        key("Authenticate");
+        key(null);
+
+        key("Revoke");
+        key("Rekey");
+        key("Quit");
 
         key("7");
         key("8");
@@ -191,9 +195,13 @@ public class TChar extends PRFETerminal {
         key("2");
         key("3");
 
-        key("Quit");
+        key("Clear");
         key("0");
         key("Switch");
+
+        key("Auth Buyer");
+        key("Authenticate");
+        key(null);
         add(keypad, BorderLayout.CENTER);
     }
 
@@ -232,6 +240,8 @@ public class TChar extends PRFETerminal {
                     case "7":
                     case "8":
                     case "9":
+                        keyPressed(Integer.parseInt(s));
+                        break;
                     case "Charge":
                     	setText(charge());
                     	resetConnection();
@@ -240,6 +250,13 @@ public class TChar extends PRFETerminal {
                         break;
                     case "Rekey":
                         setText(rekey(T_TYPE, T_SOFT_VERSION, true, true, true, true));
+                        break;
+                    case "Clear":
+                        setText("0");
+                        pin = 0;
+                        break;
+                    case "Auth Buyer":
+                        setText(authenticateBuyer(T_TYPE, T_SOFT_VERSION));
                         break;
                     default:
                         setText("nop");
@@ -251,6 +268,16 @@ public class TChar extends PRFETerminal {
             System.out.println(e);
             System.out.println(MSG_ERROR);
         }
+    }
+
+    void keyPressed(int key) {
+        if (pin <= 99999) {
+            pin *= 10;
+            pin += key;
+        } else {
+            pin = 0;
+        }
+        setText(pin);
     }
 
     public Dimension getPreferredSize() {

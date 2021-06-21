@@ -517,6 +517,7 @@ public abstract class PRFETerminal extends JPanel implements ActionListener {
             System.out.printf("Wrong pin, %d tries remaining\n", tries);
             return "Wrong Pin!";
         }
+        System.out.println("Authenticated Buyer Successfully");
         return "Authenticated Buyer Succesfully";
     }
 

@@ -92,13 +92,26 @@ public class TCons extends PRFETerminal {
     }
 
     void keyPressed(int key) {
+        if (pin <= 99999) {
+            pin *= 10;
+            pin += key;
+        } else {
+            pin = 0;
+        }
+
+
         if (consumeAmount < CONSUME_LIMIT * 10) {
             consumeAmount *= 10;
             consumeAmount += key;
         } else {
             consumeAmount = 0;
         }
-        setText(consumeAmount);
+
+        if (pin > consumeAmount) {
+            setText(pin);
+        } else {
+            setText(consumeAmount);
+        }
     }
 
     void buildGUI(JFrame parent) {
@@ -110,13 +123,14 @@ public class TCons extends PRFETerminal {
         display.setBackground(Color.darkGray);
         display.setForeground(Color.green);
         add(display, BorderLayout.NORTH);
-        keypad = new JPanel(new GridLayout(6, 3));
+        keypad = new JPanel(new GridLayout(7, 3));
         key("Read");
         key("Consume");
-        key("Authenticate");
+        key(null);
 
         key("Revoke");
         key("Rekey");
+        key("Quit");
 
         key("7");
         key("8");
@@ -130,9 +144,13 @@ public class TCons extends PRFETerminal {
         key("2");
         key("3");
 
-        key("Quit");
+        key("Clear");
         key("0");
         key("Switch");
+
+        key("Auth Buyer");
+        key("Authenticate");
+        key(null);
         add(keypad, BorderLayout.CENTER);
     }
 
@@ -185,6 +203,14 @@ public class TCons extends PRFETerminal {
                         break;
                     case "Rekey":
                         setText(rekey(T_TYPE, T_SOFT_VERSION, true, true, true, true));
+                        break;
+                    case "Clear":
+                        setText("0");
+                        pin = 0;
+                        consumeAmount = 0;
+                        break;
+                    case "Auth Buyer":
+                        setText(authenticateBuyer(T_TYPE, T_SOFT_VERSION));
                         break;
                     default:
                         setText("nop");

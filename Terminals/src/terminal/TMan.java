@@ -164,6 +164,7 @@ public class TMan extends PRFETerminal {
                     case "Clear":
                         setText("0");
                         pin = 0;
+                        break;
                     case "Auth Buyer":
                         setText(authenticateBuyer(T_TYPE, T_SOFT_VERSION));
                         break;
