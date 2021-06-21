@@ -76,7 +76,7 @@ public class TChar extends PRFETerminal {
 
 	public String charge() {
 		byte[] sigBuffer = new byte[112];
-		
+
 		signature.init(Server.getPrivate(), Signature.MODE_SIGN);
 		signature.sign(nonceT, (short) 0, (short) 8, sigBuffer, (short) 0);
 		CommandAPDU chargeCommand = new CommandAPDU((int) PRFE_CLA, (int) CHAR_INS, (int)T_TYPE, (int)T_SOFT_VERSION, sigBuffer);
@@ -86,9 +86,9 @@ public class TChar extends PRFETerminal {
 		} catch (CardException e) {
 			return "Charging error";
 		}
-		
+
 		byte[] data = response.getData();
-		
+
 		System.arraycopy(data, 0, cardID, 0, 4);
 
 		short petrolQuota = Util.getShort(data, (short) 4);
@@ -103,28 +103,28 @@ public class TChar extends PRFETerminal {
 		if (!signature.verify(sigBuffer, (short) 0, (short) 16, data, (short) 8, (short) 56)) {
 			return "Charging error";
 		}
-		
+
 		short extraQuota = getMonthlyQuota(cardID);
-		
-		
+
+
 		data[4] = (byte) (extraQuota & 0xff);
 		data[5] = (byte) ((extraQuota >> 8) & 0xff);
 
 		data[6] = (byte) (tNum & 0xff);
-		data[7] = (byte) ((tNum >> 8) & 0xff); 
+		data[7] = (byte) ((tNum >> 8) & 0xff);
 		incNonce(nonceT);
 
 		System.arraycopy(nonceT, 0, data, 8, 8);
 		signature.init(Server.getPrivate(), Signature.MODE_SIGN);
 		signature.sign(data, (short) 0, (short) 16, data, (short) 8);
-		
+
 		chargeCommand = new CommandAPDU((int) PRFE_CLA, (int) CHAR_INS, (int) T_TYPE, (int)T_SOFT_VERSION, data);
 		try {
 			response = applet.transmit(chargeCommand);
 		} catch (CardException e) {
 			return "Charging error";
 		}
-		
+
 		data = response.getData();
 		System.arraycopy(cardID, 0, sigBuffer, 0, 4);
 		System.arraycopy(TCert, 0, sigBuffer, 4, 56);
@@ -133,7 +133,7 @@ public class TChar extends PRFETerminal {
 		sigBuffer[61] = (byte) ((petrolQuota >> 8) & 0xff);
 		sigBuffer[62] = (byte) (tNum & 0xff);
 		sigBuffer[63] = (byte) ((tNum >> 8) & 0xff);
-	
+
 		signature.init(Card.getPublic(), Signature.MODE_VERIFY);
 
 		if (!signature.verify(sigBuffer, (short) 0, (short) 64, data, (short) 0, (short) 56)) {
@@ -143,8 +143,8 @@ public class TChar extends PRFETerminal {
 		if (!signature.verify(nonceT, (short) 0, (short) 8, data, (short) 56, (short) 56)) {
 			return "Charging error";
 		}
-		
-		
+
+
 		return "Charging successful!";
 	}
 
@@ -160,7 +160,7 @@ public class TChar extends PRFETerminal {
         }
         // Any remaining carry is just ignored.
     }
-    
+
     private short getMonthlyQuota(byte[] id) {
     	return (short) 100;
     }
@@ -210,7 +210,11 @@ public class TChar extends PRFETerminal {
                         resetConnection();
                         break;
                     case "Authenticate": // authenticate
-                        setText(authenticate(T_TYPE, T_SOFT_VERSION, T_ID));
+                        if(switchCallback.isRevokedCard(cardID)) {
+                          setText("Revoked card");
+                        } else {
+                          setText(authenticate(T_TYPE, T_SOFT_VERSION, T_ID));
+                        }
                         break;
                     case "Quit":
                         System.exit(0);

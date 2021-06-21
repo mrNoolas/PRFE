@@ -149,8 +149,12 @@ public class TCons extends PRFETerminal {
                         setText(readCard(T_TYPE, T_SOFT_VERSION, T_ID));
                         break;
                     case "Authenticate": // authenticate
-                        setText(authenticate(T_TYPE, T_SOFT_VERSION, T_ID));
-                        resetSession();
+                        if(switchCallback.isRevokedCard(cardID)) {
+                          setText("Revoked card");
+                        } else {
+                          setText(authenticate(T_TYPE, T_SOFT_VERSION, T_ID));
+                          resetSession();
+                        }
                         break;
                     case "Quit":
                         System.exit(0);
@@ -197,9 +201,11 @@ public class TCons extends PRFETerminal {
         byte[] nonceT = generateNonce();
         byte[] sigBuffer = new byte[2*SIGN_LENGTH];
 
-        signature.init(skey, Signature.MODE_SIGN);
-        signature.sign(nonceT, (short) 0, (short) 8, sigBuffer, (short) 0);
+        AESCipher.init(skey, Cipher.MODE_ENCRYPT);
+        AESCipher.doFinal(nonceT, (short) 0, (short) 8, sigBuffer, (short) 0);
+
         CommandAPDU consumeCommand = new CommandAPDU(PRFE_CLA, CONS_INS, T_TYPE, T_SOFT_VERSION, sigBuffer);
+
 
         ResponseAPDU response = null;
         try {
@@ -224,8 +230,9 @@ public class TCons extends PRFETerminal {
         Util.setShort(sigBuffer, (short) 4, petrolQuotaOnCard);
         System.arraycopy(nonceC, 0, sigBuffer, 6, NONCET_LENGTH);
 
-        signature.init(skey, Signature.MODE_VERIFY);
-        if (!signature.verify(sigBuffer, (short) 0, (short) 14, data, (short) 6, SIGN_LENGTH)) {
+        AESCipher.init(skey, Cipher.MODE_DECRYPT);
+        AESCipher.doFinal(data, (short) 6, (short) SIGN_LENGTH, sigBuffer, (short) 14)
+        if ((Util.arrayCompare(sigBuffer, (short) 0, sigBuffer, (short) 14, (short) 14)) != (byte) 0) {
             return "Signature invalid";
         }
 
@@ -248,8 +255,8 @@ public class TCons extends PRFETerminal {
         System.arraycopy(nonceT, 0, dataBuffer, 6, NONCET_LENGTH);
 
 
-        signature.init(skey, Signature.MODE_SIGN);
-        signature.sign(dataBuffer, (short) 0, (short) 14, sigBuffer, (short) 6);
+        AESCipher.init(skey, Cipher.MODE_ENCRYPT);
+        AESCipher.doFinal(dataBuffer, (short) 0, (short) 14, sigBuffer, (short) 6);
 
         CommandAPDU cons2Command = new CommandAPDU((int) PRFE_CLA, (int) CONS_INS, (int) T_TYPE, (int) T_SOFT_VERSION, sigBuffer);
 
@@ -265,7 +272,7 @@ public class TCons extends PRFETerminal {
         incNonce(nonceC); //sequence nr + 4
         nonceT = nonceC;
         byte[] responseData = response2.getData();
-        if(responseData[0] == (byte) 1){
+        if(responseData[0] == (byte) 0){
             short remainingPetrolQuota = getGasUsed(amount, petrolQuotaOnCard);
             if(remainingPetrolQuota < wantedPetrol){
 
@@ -276,8 +283,8 @@ public class TCons extends PRFETerminal {
                 System.arraycopy(nonceT, 0, dataBuffer, 6, NONCET_LENGTH);
 
 
-                signature.init(skey, Signature.MODE_SIGN);
-                signature.sign(dataBuffer, (short) 0, (short) 14, sigBuffer, (short) 6);
+                AESCipher.init(skey, Cipher.MODE_ENCRYPT);
+                AESCipher.doFinal(dataBuffer, (short) 0, (short) 14, sigBuffer, (short) 6);
 
                 CommandAPDU cons3Command = new CommandAPDU((int) PRFE_CLA, (int) CONS_INS, (int) T_TYPE, (int)T_SOFT_VERSION, sigBuffer);
 
