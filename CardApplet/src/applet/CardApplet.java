@@ -796,7 +796,7 @@ public class CardApplet extends Applet implements ISO7816 {
         if (lc_length < (byte) CHAR2_INC_LEN) {
             ISOException.throwIt((short) (SW_WRONG_LENGTH | CHAR2_INC_LEN));
         }
-
+	
 	buffer = apdu.getBuffer();
 	signature.init(pukTChar, Signature.MODE_VERIFY);
 	signature.update(buffer, (short) 0, (short) 8);
@@ -805,7 +805,7 @@ public class CardApplet extends Applet implements ISO7816 {
 	incNonce(nonceT);
 
 	if(!signature.verify(nonceT, (short) 0, (short) 8, buffer, (short) 8, SIGN_LENGTH)) {
-		ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
+		//ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
 
 
 
@@ -815,7 +815,9 @@ public class CardApplet extends Applet implements ISO7816 {
 
 
 	short expectedLength = apdu.setOutgoing();
-	if (expectedLength < (short) CHAR2_RESP_LEN) ISOException.throwIt((short) (SW_WRONG_LENGTH | CHAR2_RESP_LEN));
+	
+	// if (expectedLength < (short) CHAR2_RESP_LEN) ISOException.throwIt((short) (SW_WRONG_LENGTH | CHAR2_RESP_LEN));
+	
 	apdu.setOutgoingLength((byte) CHAR2_RESP_LEN);
 	signature.init(prkc, Signature.MODE_SIGN);
 	signature.update(cID, (short) 0, (short) 4);
@@ -839,8 +841,10 @@ public class CardApplet extends Applet implements ISO7816 {
 	signature.sign(nonceT, (short) 0, NONCE_LENGTH, buffer, SIGN_LENGTH);
 
 	status[(short) 0] = (byte) (status[(short) 0] - 0x10);
-	apdu.setOutgoingAndSend((short) 0, (short) CHAR2_RESP_LEN);
 
+	apdu.sendBytes((short) 0, (short) CHAR2_RESP_LEN);
+		
+        
 
     }
 

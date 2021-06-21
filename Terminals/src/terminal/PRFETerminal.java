@@ -505,8 +505,8 @@ public abstract class PRFETerminal extends JPanel implements ActionListener {
         if ((data[0] & 0xff) == 0x90 && data[1] == 0) {
             System.out.println("Rekeyed Succesfully");
             return "Rekeyed Succesfully";
-        }
-        return "Rekey not accepted by card";
+        } 
+        return "Rekey not accepted by card"; 
     }
 
     public abstract Dimension getPreferredSize();

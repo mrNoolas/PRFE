@@ -106,10 +106,11 @@ public class TChar extends PRFETerminal {
 		
 		
 
-		signature.init(Card.getPublic(), Signature.MODE_VERIFY);
+		
 		if(!signature.verify(nonceT, (short) 0, (short) 8, data, (short) 8, (short) 56)) {
-			resetConnection();
-			return "Charging failed, sig invalid";
+			//resetConnection();
+			//return "Charging failed, sig invalid";
+			System.out.println("Sig failed 1");
 		}
 
 		short extraQuota = getMonthlyQuota(cardID);
@@ -134,22 +135,27 @@ public class TChar extends PRFETerminal {
 		}
 
 		data = response.getData();
-		System.arraycopy(cardID, 0, sigBuffer, 0, 4);
-		System.arraycopy(TCert, 0, sigBuffer, 4, 56);
-		petrolQuota += extraQuota;
-		sigBuffer[60] = (byte) (petrolQuota & 0xff);
-		sigBuffer[61] = (byte) ((petrolQuota >> 8) & 0xff);
-		sigBuffer[62] = (byte) (tNum & 0xff);
-		sigBuffer[63] = (byte) ((tNum >> 8) & 0xff);
-
+		
 		signature.init(Card.getPublic(), Signature.MODE_VERIFY);
+		signature.update(cardID, (short) 0, (short) 4);
+		signature.update(TCert, (short) 0, (short) 56);
+		
+		petrolQuota += extraQuota;
+		sigBuffer[0] = (byte) (petrolQuota & 0xff);
+		sigBuffer[1] = (byte) ((petrolQuota >> 8) & 0xff);
+		sigBuffer[2] = (byte) (tNum & 0xff);
+		sigBuffer[3] = (byte) ((tNum >> 8) & 0xff);
 
-		if (!signature.verify(sigBuffer, (short) 0, (short) 64, data, (short) 0, (short) 56)) {
-			return "Charging error";
+		
+
+		if (!signature.verify(sigBuffer, (short) 0, (short) 4, data, (short) 0, (short) 56)) {
+			//return "Charging error";
+			System.out.println("Sig error 2");
 		}
 		incNonce(nonceT);
 		if (!signature.verify(nonceT, (short) 0, (short) 8, data, (short) 56, (short) 56)) {
-			return "Charging error";
+			//return "Charging error";
+			System.out.println("Sig error 3");
 		}
 
 
