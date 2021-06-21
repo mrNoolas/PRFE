@@ -231,7 +231,7 @@ public class TMan extends PRFETerminal {
         System.arraycopy(pin, 0, buffer1, 166, 6);
 
         ResponseAPDU response;
-        CommandAPDU readCommand = new CommandAPDU(PRFE_CLA, PERS_INS, (byte) 1, T_SOFT_VERSION, buffer0, 0, 228, 228);
+        CommandAPDU readCommand = new CommandAPDU(PRFE_CLA, PERS_INS, T_TYPE, T_SOFT_VERSION, buffer0, 0, 228, 228);
         try {
             //card sends back apdu with the data after transmitting the commandAPDU to the card
             response = applet.transmit(readCommand);

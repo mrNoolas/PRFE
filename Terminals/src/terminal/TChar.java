@@ -74,111 +74,6 @@ public class TChar extends PRFETerminal {
         setEnabled(false);
     }
 
-	public String charge() {
-		byte[] sigBuffer = new byte[112];
-
-		System.arraycopy(nonceT, 0, sigBuffer, 0, 8);
-		System.arraycopy(nonceT, 0, sigBuffer, 8, 8);
-		AESCipher.init(skey, Cipher.MODE_ENCRYPT);
-		AESCipher.doFinal(sigBuffer, (short) 0, (short) 16, sigBuffer, (short) 0);
-
-		CommandAPDU chargeCommand = new CommandAPDU((int) PRFE_CLA, (int) CHAR_INS, (int)T_TYPE, (int)T_SOFT_VERSION, sigBuffer);
-		ResponseAPDU response;
-		try {
-			response = applet.transmit(chargeCommand);
-		} catch (CardException e) {
-			return "Charging error";
-		}
-
-		byte[] data = response.getData();
-
-		System.arraycopy(data, 0, cardID, 0, 4);
-		
-
-		short petrolQuota = Util.getShort(data, (short) 4);
-
-		short tNum = Util.getShort(data, (short) 6);
-
-		signature.init(Card.getPublic(), Signature.MODE_VERIFY);
-		signature.update(data, (short) 0, (short) 8);
-		incNonce(nonceT);
-		
-		
-		
-
-		
-		if(!signature.verify(nonceT, (short) 0, (short) 8, data, (short) 8, (short) 56)) {
-			//resetConnection();
-			//return "Charging failed, sig invalid";
-			System.out.println("Sig failed 1");
-		}
-
-		short extraQuota = getMonthlyQuota(cardID);
-
-
-		data[4] = (byte) (extraQuota & 0xff);
-		data[5] = (byte) ((extraQuota >> 8) & 0xff);
-
-		data[6] = (byte) (tNum & 0xff);
-		data[7] = (byte) ((tNum >> 8) & 0xff);
-		incNonce(nonceT);
-		
-		System.arraycopy(nonceT, 0, data, 8, 8);
-		signature.init(TChar.getPrivate(), Signature.MODE_SIGN);
-		signature.sign(data, (short) 0, (short) 16, data, (short) 8);
-
-		chargeCommand = new CommandAPDU((int) PRFE_CLA, (int) CHAR_INS, (int) T_TYPE, (int)T_SOFT_VERSION, data);
-		try {
-			response = applet.transmit(chargeCommand);
-		} catch (CardException e) {
-			return "Charging error";
-		}
-
-		data = response.getData();
-		
-		signature.init(Card.getPublic(), Signature.MODE_VERIFY);
-		signature.update(cardID, (short) 0, (short) 4);
-		signature.update(TCert, (short) 0, (short) 56);
-		
-		petrolQuota += extraQuota;
-		sigBuffer[0] = (byte) (petrolQuota & 0xff);
-		sigBuffer[1] = (byte) ((petrolQuota >> 8) & 0xff);
-		sigBuffer[2] = (byte) (tNum & 0xff);
-		sigBuffer[3] = (byte) ((tNum >> 8) & 0xff);
-
-		
-
-		if (!signature.verify(sigBuffer, (short) 0, (short) 4, data, (short) 0, (short) 56)) {
-			//return "Charging error";
-			System.out.println("Sig error 2");
-		}
-		incNonce(nonceT);
-		if (!signature.verify(nonceT, (short) 0, (short) 8, data, (short) 56, (short) 56)) {
-			//return "Charging error";
-			System.out.println("Sig error 3");
-		}
-
-
-		return "Charging successful!";
-	}
-
-	private void incNonce (byte[] nonce) {
-        for (short i = (short) 7; i >= (short) 0; i--) {
-            if (nonce[i] == 0xff) {
-                nonce[i] = (byte) 0x00;
-                // Continue looping to process carry
-            } else {
-                nonce[i] = (byte) (((short) (nonce[i] & 0xff) + 1) & 0xff); // increment byte with 1, unsigned
-                break; // no carry so quit
-            }
-        }
-        // Any remaining carry is just ignored.
-    }
-
-    private short getMonthlyQuota(byte[] id) {
-    	return (short) 100;
-    }
-
     void buildGUI(JFrame parent) {
         setLayout(new BorderLayout());
         display = new JTextField(DISPLAY_WIDTH);
@@ -292,6 +187,102 @@ public class TChar extends PRFETerminal {
             pin = 0;
         }
         setText(pin);
+    }
+
+    public String charge() {
+        byte[] buffer = new byte[112];
+
+        // TODO: reenable
+        //if (!authenticated || !buyerAuthenticated) {
+        //    System.out.println("Authentication required before charging");
+        //    return "Please authenticate first.";
+        //}
+
+        incNonce(nonceT);
+        AESCipher.init(skey, Cipher.MODE_ENCRYPT);
+        AESCipher.update(nonceT, (short) 0, (short) 8, buffer, (short) 0);
+        AESCipher.doFinal(nonceC, (short) 0, (short) 8, buffer, (short) 0);
+
+        CommandAPDU chargeCommand = new CommandAPDU((int) PRFE_CLA, (int) CHAR_INS, (int)T_TYPE, (int)T_SOFT_VERSION, buffer, 0, 16, 64);
+        ResponseAPDU response;
+        try {
+            response = applet.transmit(chargeCommand);
+        } catch (CardException e) {
+            return "Charging error";
+        }
+
+        byte[] data = response.getData();
+        System.arraycopy(data, 0, cardID, 0, 4);
+
+        short petrolQuota = Util.getShort(data, (short) 4);
+        short tNum = Util.getShort(data, (short) 6);
+
+        // Here we would verify the data given by the card with the server.
+
+        signature.init(Card.getPublic(), Signature.MODE_VERIFY);
+        signature.update(data, (short) 0, (short) 8);
+        incNonce(nonceC);
+
+        if(!signature.verify(nonceC, (short) 0, (short) 8, data, (short) 8, (short) 56)) {
+            resetConnection();
+            System.out.println("Sig failed 1");
+            return "Charging failed, sig invalid";
+        }
+        short extraQuota = getMonthlyQuota(cardID);
+
+        Util.setShort(data, (short) 4, extraQuota);
+        Util.setShort(data, (short) 6, tNum);
+        incNonce(nonceT);
+
+        System.arraycopy(nonceT, 0, data, 8, 8);
+        signature.init(TChar.getPrivate(), Signature.MODE_SIGN);
+        signature.sign(data, (short) 0, (short) 16, data, (short) 8); // overwrites nonce (it is secret, so do not send in plaintext)
+
+        chargeCommand = new CommandAPDU((int) PRFE_CLA, (int) CHAR_INS, (int) T_TYPE, (int) T_SOFT_VERSION, data, 0, 64, 112);
+        try {
+            response = applet.transmit(chargeCommand);
+        } catch (CardException e) {
+            return "Charging error";
+        }
+
+        data = response.getData();
+
+        signature.init(Card.getPublic(), Signature.MODE_VERIFY);
+        signature.update(cardID, (short) 0, (short) 4);
+        signature.update(TCert, (short) 0, (short) 56);
+
+        petrolQuota += extraQuota;
+        Util.setShort(buffer, (short) 0, petrolQuota);
+        Util.setShort(buffer, (short) 2, tNum);
+
+        if (!signature.verify(buffer, (short) 0, (short) 4, data, (short) 0, (short) 56)) {
+            System.out.println("Sig error 2");
+            return "Charging error";
+        }
+        incNonce(nonceC);
+        if (!signature.verify(nonceC, (short) 0, (short) 8, data, (short) 56, (short) 56)) {
+            //return "Charging error";
+            System.out.println("Sig error 3");
+        }
+
+        return "Charging successful!";
+    }
+
+    private void incNonce (byte[] nonce) {
+        for (short i = (short) 7; i >= (short) 0; i--) {
+            if (nonce[i] == 0xff) {
+                nonce[i] = (byte) 0x00;
+                // Continue looping to process carry
+            } else {
+                nonce[i] = (byte) (((short) (nonce[i] & 0xff) + 1) & 0xff); // increment byte with 1, unsigned
+                break; // no carry so quit
+            }
+        }
+        // Any remaining carry is just ignored.
+    }
+
+    private short getMonthlyQuota(byte[] id) {
+        return (short) 100;
     }
 
     public Dimension getPreferredSize() {
