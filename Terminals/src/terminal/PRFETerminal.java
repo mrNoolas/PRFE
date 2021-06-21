@@ -479,7 +479,7 @@ public abstract class PRFETerminal extends JPanel implements ActionListener {
         }
 
         byte[] data = response.getData();
-        if (data != sign) {
+        if (!Arrays.equals(data, 0, 58, sign, 0, 58)) {
             System.out.println("Readback incorrect");
             return "Readback incorrect for signature";
         }
