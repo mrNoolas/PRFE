@@ -92,6 +92,9 @@ public abstract class PRFETerminal extends JPanel implements ActionListener {
     protected byte[] CCert;            // Server certificate verification key
     protected byte[] CCertExp = {(byte) 0x07, (byte) 0xe6, (byte) 0x01, (byte) 0x01}; // yymd: 2022-01-01
 
+	protected byte[] TCert;
+	protected byte[] TCertExp;
+
     protected KeyAgreement ECExch;
     protected Cipher AESCipher;
     protected Signature signature;
@@ -351,12 +354,13 @@ public abstract class PRFETerminal extends JPanel implements ActionListener {
 
         // TODO: get from server, permanently store, and then retrieve TCert from storage here
         // Generate TCert & expiry date
-        byte[] TCertExp = new byte[] {(byte) 0x07, (byte) 0xe5, (byte) 0x0c, (byte) 0x1f};
+        TCertExp = new byte[] {(byte) 0x07, (byte) 0xe5, (byte) 0x0c, (byte) 0x1f};
 
         signature.init(Server.getPrivate(), Signature.MODE_SIGN);
         signature.update(termID, (short) 0, (short) 4);
         signature.update(new byte[] {termType}, (short) 0, (short) 1); // Type termKeys
-        signature.sign(TCertExp, (short) 0, (short) 4, buffer, (short) 20); // outputs 54, 55 or 56 bytes of signature data
+        signature.sign(TCertExp, (short) 0, (short) 4, TCert, (short) 0); // outputs 54, 55 or 56 bytes of signature data
+		System.arraycopy(TCert, 0, buffer, 20, 56);
         System.arraycopy(TCertExp, 0, buffer, 76, 4);
 
         // sign message
@@ -429,10 +433,11 @@ public abstract class PRFETerminal extends JPanel implements ActionListener {
             }
 
             byte[] data = response.getBytes();
-            if (data[0] == 0x90 && data[1] == 0) {
+            if ((data[0] & 0xff) == 0x90 && data[1] == 0) {
                 System.out.println("Revocaton Succesful");
                 return "Revocaton Succesful";
             }
+
             return "Revocation not accepted by card";
         } else {
             return "Must auth to send rev to the card!";

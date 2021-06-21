@@ -49,6 +49,7 @@ import terminal.PRFETerminal;
 
 public class TChar extends PRFETerminal {
     private static final byte PERS_INS = (byte) 0x50;
+    private static final byte CHAR_INS = (byte) 0x20;
 
     static final Dimension PREFERRED_SIZE = new Dimension(900, 300);
     static final int DISPLAY_WIDTH = 60;
@@ -71,6 +72,97 @@ public class TChar extends PRFETerminal {
         //simulatorInterface = new JavaxSmartCardInterface(); // SIM
         buildGUI(parent);
         setEnabled(false);
+    }
+
+	public String charge() {
+		byte[] sigBuffer = new byte[112];
+		
+		signature.init(Server.getPrivate(), Signature.MODE_SIGN);
+		signature.sign(nonceT, (short) 0, (short) 8, sigBuffer, (short) 0);
+		CommandAPDU chargeCommand = new CommandAPDU((int) PRFE_CLA, (int) CHAR_INS, (int)T_TYPE, (int)T_SOFT_VERSION, sigBuffer);
+		ResponseAPDU response = null;
+		try {
+			response = applet.transmit(chargeCommand);
+		} catch (CardException e) {
+			return "Charging error";
+		}
+		
+		byte[] data = response.getData();
+		
+		System.arraycopy(data, 0, cardID, 0, 4);
+
+		short petrolQuota = Util.getShort(data, (short) 4);
+
+		short tNum = Util.getShort(data, (short) 6);
+
+		System.arraycopy(data, 0, sigBuffer, 0, 8);
+		incNonce(nonceT);
+		System.arraycopy(nonceT, 0, sigBuffer, 8, 8);
+
+		signature.init(Card.getPublic(), Signature.MODE_VERIFY);
+		if (!signature.verify(sigBuffer, (short) 0, (short) 16, data, (short) 8, (short) 56)) {
+			return "Charging error";
+		}
+		
+		short extraQuota = getMonthlyQuota(cardID);
+		
+		
+		data[4] = (byte) (extraQuota & 0xff);
+		data[5] = (byte) ((extraQuota >> 8) & 0xff);
+
+		data[6] = (byte) (tNum & 0xff);
+		data[7] = (byte) ((tNum >> 8) & 0xff); 
+		incNonce(nonceT);
+
+		System.arraycopy(nonceT, 0, data, 8, 8);
+		signature.init(Server.getPrivate(), Signature.MODE_SIGN);
+		signature.sign(data, (short) 0, (short) 16, data, (short) 8);
+		
+		chargeCommand = new CommandAPDU((int) PRFE_CLA, (int) CHAR_INS, (int) T_TYPE, (int)T_SOFT_VERSION, data);
+		try {
+			response = applet.transmit(chargeCommand);
+		} catch (CardException e) {
+			return "Charging error";
+		}
+		
+		data = response.getData();
+		System.arraycopy(cardID, 0, sigBuffer, 0, 4);
+		System.arraycopy(TCert, 0, sigBuffer, 4, 56);
+		petrolQuota += extraQuota;
+		sigBuffer[60] = (byte) (petrolQuota & 0xff);
+		sigBuffer[61] = (byte) ((petrolQuota >> 8) & 0xff);
+		sigBuffer[62] = (byte) (tNum & 0xff);
+		sigBuffer[63] = (byte) ((tNum >> 8) & 0xff);
+	
+		signature.init(Card.getPublic(), Signature.MODE_VERIFY);
+
+		if (!signature.verify(sigBuffer, (short) 0, (short) 64, data, (short) 0, (short) 56)) {
+			return "Charging error";
+		}
+		incNonce(nonceT);
+		if (!signature.verify(nonceT, (short) 0, (short) 8, data, (short) 56, (short) 56)) {
+			return "Charging error";
+		}
+		
+		
+		return "Charging successful!";
+	}
+
+	private void incNonce (byte[] nonce) {
+        for (short i = (short) 7; i >= (short) 0; i--) {
+            if (nonce[i] == 0xff) {
+                nonce[i] = (byte) 0x00;
+                // Continue looping to process carry
+            } else {
+                nonce[i] = (byte) (((short) (nonce[i] & 0xff) + 1) & 0xff); // increment byte with 1, unsigned
+                break; // no carry so quit
+            }
+        }
+        // Any remaining carry is just ignored.
+    }
+    
+    private short getMonthlyQuota(byte[] id) {
+    	return (short) 100;
     }
 
     void buildGUI(JFrame parent) {
@@ -137,7 +229,11 @@ public class TChar extends PRFETerminal {
                     case "8":
                     case "9":
                     case "Charge":
+                    	setText(charge());
+                    	resetConnection();
                     case "Revoke":
+                        setText(revoke(T_TYPE, T_SOFT_VERSION));
+                        break;
                     case "Rekey":
                     default:
                         setText("nop");
