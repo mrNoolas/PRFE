@@ -174,6 +174,7 @@ public class TMan extends PRFETerminal {
         byte[] pin = new byte[6];
         SecureRandom random = new SecureRandom();
         int pinInt = random.nextInt(1000000);
+        System.out.printf("PIN: %d\n", pinInt);
 
         pin[0] = (byte) (pinInt - (pinInt % 100000));
         pin[1] = (byte) ((pinInt % 100000) - (pinInt % 10000));

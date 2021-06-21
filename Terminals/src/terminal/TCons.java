@@ -267,8 +267,6 @@ public class TCons extends PRFETerminal {
         System.arraycopy(nonceT, 0, dataBuffer, 6, NONCET_LENGTH);
         Util.setShort(dataBuffer, (short) 14, (short) 0);
 
-
-
         AESCipher.init(skey, Cipher.MODE_ENCRYPT);
         AESCipher.doFinal(dataBuffer, (short) 0, (short) 16, sigBuffer, (short) 6);
 

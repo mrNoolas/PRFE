@@ -28,6 +28,7 @@ public class CardApplet extends Applet implements ISO7816 {
     private static final short REVOKE_INC_LENGTH = 56;
     private static final short REKEY_INC_LENGTH0 = 58;
     private static final short REKEY_INC_LENGTH1 = 228;
+    private static final short AUTH_BUY_INC_LEN = 16;
 
     private static final short CHAR1_INC_LEN = 56;
     private static final short CHAR2_INC_LEN = 64;
@@ -135,6 +136,7 @@ public class CardApplet extends Applet implements ISO7816 {
     // 0x0f authentication initiated, session key exchanged
     // User authentication is handled by the PIN class
     private byte[] status;
+    private boolean[] buyerAuthenticated;
 
 
     public CardApplet() {
@@ -145,6 +147,7 @@ public class CardApplet extends Applet implements ISO7816 {
         nonceC = JCSystem.makeTransientByteArray((short) NONCE_LENGTH, JCSystem.CLEAR_ON_RESET);
         nonceT = JCSystem.makeTransientByteArray((short) NONCE_LENGTH, JCSystem.CLEAR_ON_RESET);
         rekeySCertBuffer = JCSystem.makeTransientByteArray((short) 58, JCSystem.CLEAR_ON_RESET);
+        buyerAuthenticated = JCSystem.makeTransientBooleanArray((short) 1, JCSystem.CLEAR_ON_RESET);
 
         skey = (AESKey) KeyBuilder.buildKey(KeyBuilder.TYPE_AES_TRANSIENT_DESELECT, KeyBuilder.LENGTH_AES_128, true);
         pukTMan  = (ECPublicKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_F2M_PUBLIC, KeyBuilder.LENGTH_EC_F2M_193, true); // public key TMan
@@ -187,7 +190,19 @@ public class CardApplet extends Applet implements ISO7816 {
 
     public boolean select() {
         status[0] = (byte) 0x00; // unitialised
-        tInfo[0] = 0x000000; // sets entire array to 0 (6 bytes)
+
+        // sets entire array to 0 (6 bytes)
+        tInfo[0] = 0;
+        tInfo[1] = 0;
+        tInfo[2] = 0;
+        tInfo[3] = 0;
+        tInfo[4] = 0;
+        tInfo[5] = 0;
+
+        buyerAuthenticated[(short) 0] = false;
+
+        Util.arrayFillNonAtomic(nonceT, (short) 0, (short) 8, (byte) 0);
+        Util.arrayFillNonAtomic(nonceC, (short) 0, (short) 8, (byte) 0);
 
         return true;
     }
@@ -206,7 +221,7 @@ public class CardApplet extends Applet implements ISO7816 {
         if (status[(short) 0] == (byte) 0x04) ISOException.throwIt((short) 0x4444); // card is revoked
 
         switch (ins & 0xff) {
-            case 0x00:
+            case 0x00: // read and reset
                 /*
                  * READ instruction:
                  * INS: 0x00
@@ -272,7 +287,7 @@ public class CardApplet extends Applet implements ISO7816 {
         }
        // if(tInfo[0] != TERM_TYPE_TCONS) ISOException.throwIt()
         else{
-            consume(apdu, buffer);
+            //consume(apdu, buffer);
         }
                 break;
 
@@ -332,8 +347,8 @@ public class CardApplet extends Applet implements ISO7816 {
                 // rekey
                 rekey(apdu, buffer);
                 break;
-            case 0xf0:
-                //reset (connection)
+            case 0x70:
+                // authenticate buyer
                 break;
             default:
                 select(); // reset
@@ -456,6 +471,53 @@ public class CardApplet extends Applet implements ISO7816 {
         apdu.sendBytes((short) 0, (short) READ_RESP_LEN);
     }
 
+    private void authenticateBuyer(APDU apdu, byte[] buffer) {
+        checkAndCopyTypeAndVersion(buffer);
+
+        // First get and check the length of the data buffer:
+        short lc_length = apdu.setIncomingAndReceive();
+        if (lc_length < (byte) AUTH_BUY_INC_LEN) {
+            select();
+            ISOException.throwIt((short) (SW_WRONG_LENGTH | AUTH_BUY_INC_LEN));
+        }
+
+        buffer = apdu.getBuffer();
+        incNonce(nonceT);
+        if (Util.arrayCompare(nonceT, (short) 0, buffer, (short) 5, NONCE_LENGTH) == 0) {
+            if (pin.check(buffer, NONCE_LENGTH, PIN_SIZE)) {
+                buyerAuthenticated[(short) 0] = true;
+
+                buffer[(short) 0] = (byte) ((byte) PIN_TRY_LIMIT << (short) 4) | (byte) 0x1;
+                incNonce(nonceC);
+                Util.arrayCopyNonAtomic(nonceC, (short) 0, buffer, (short) 1, NONCE_LENGTH);
+                Util.arrayCopyNonAtomic(nonceT, (short) 0, buffer, (short) 9, NONCE_LENGTH);
+
+                signature.init(prkc, Signature.MODE_SIGN);
+                signature.sign(buffer, (short) 0, (short) 17, buffer, (short) 17);
+
+                AESCipher.init(skey, Cipher.MODE_ENCRYPT);
+                AESCipher.doFinal(buffer, (short) 0, (short) 80, buffer, (short) 0);
+
+                apdu.setOutgoingAndSend((short) 0, (short) 80);
+            } else {
+                buffer[(short) 0] = (byte) (pin.getTriesRemaining() << (short) 4);
+                incNonce(nonceC);
+                Util.arrayCopyNonAtomic(nonceC, (short) 0, buffer, (short) 1, NONCE_LENGTH);
+                Util.arrayCopyNonAtomic(nonceT, (short) 0, buffer, (short) 9, NONCE_LENGTH);
+
+                signature.init(prkc, Signature.MODE_SIGN);
+                signature.sign(buffer, (short) 0, (short) 17, buffer, (short) 17);
+
+                AESCipher.init(skey, Cipher.MODE_ENCRYPT);
+                AESCipher.doFinal(buffer, (short) 0, (short) 80, buffer, (short) 0);
+
+                apdu.setOutgoingAndSend((short) 0, (short) 80);
+            }
+        } else {
+            ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
+        }
+    }
+
     private void authenticate(APDU apdu, byte[] buffer) {
         switch (status[(short) 0] & 0xff){
             case 0x00: // not authenticated, or in the process of authentication
@@ -495,6 +557,7 @@ public class CardApplet extends Applet implements ISO7816 {
         // First get and check the length of the data buffer:
         short lc_length = apdu.setIncomingAndReceive();
         if (lc_length < (byte) AUTH1_INC_LEN) {
+            select();
             ISOException.throwIt((short) (SW_WRONG_LENGTH | AUTH1_INC_LEN));
         }
 
@@ -585,6 +648,7 @@ public class CardApplet extends Applet implements ISO7816 {
         // First get and check the length of the data buffer:
         short lc_length = apdu.setIncomingAndReceive();
         if (lc_length < (byte) AUTH2_INC_LEN) {
+            select();
             ISOException.throwIt((short) (SW_WRONG_LENGTH | AUTH2_INC_LEN));
         }
 
@@ -830,7 +894,7 @@ public class CardApplet extends Applet implements ISO7816 {
 		status[(short) 0] = (byte) (status[(short) 0] - 0x10);
         */
     }
-
+/*
     private void consume(APDU apdu, byte[] buffer) {
 
         switch (status[(short) 0] & 0xf0) {
