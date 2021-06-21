@@ -466,6 +466,9 @@ public abstract class PRFETerminal extends JPanel implements ActionListener {
         AESCipher.init(skey, Cipher.MODE_ENCRYPT);
         AESCipher.doFinal(buffer, (short) 0, (short) 16, buffer, (short) 0);
 
+        // reset internal pin
+        pin = 0;
+
         //construct a commandAPDU with the INS byte for read and the terminal info
         CommandAPDU command = new CommandAPDU(PRFE_CLA, AUTH_BUY_INS, termType, termSoftVers, buffer, 0, 16, 80);
 
