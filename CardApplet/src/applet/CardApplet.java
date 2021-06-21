@@ -26,14 +26,14 @@ public class CardApplet extends Applet implements ISO7816 {
     private static final short AUTH1_INC_LEN = 93;
     private static final short AUTH2_INC_LEN = 144;
     private static final short REVOKE_INC_LENGTH = 56;
+    private static final short REKEY_INC_LENGTH0 = 58;
+    private static final short REKEY_INC_LENGTH1 = 228;
 
     private static final short CHAR1_INC_LEN = 56;
     private static final short CHAR2_INC_LEN = 64;
     private static final short CONS1_INC_LENGTH = 16;
     private static final short CONS2_INC_LENGTH = 22;
     private static final short CONS3_INC_LENGTH = 22;
-
-
 
     // Response lenghts
     private static final short READ_RESP_LEN = 8;
@@ -44,8 +44,6 @@ public class CardApplet extends Applet implements ISO7816 {
     private static final short CONS1_RESP_LEN = 22; //TODO: change outgoing length of messages
     private static final short CONS2_RESP_LEN = 22;
     private static final short CONS3_RESP_LEN = 32;
-
-
 
     // keys
     private AESKey skey;
@@ -110,13 +108,14 @@ public class CardApplet extends Applet implements ISO7816 {
 
     private byte[] tInfo; // contains: 0: type; 1: software version; 2,3,4,5: terminal ID
     private byte[] cID; // 4 bytes of card ID
+    private short keyVersion = 0;
     private OwnerPIN pin;
 
     private byte[] nonceC;
     private byte[] nonceT;
 
     private byte[] keyExchBuffer;
-    private byte[] sigBuffer;
+    private byte[] rekeySCertBuffer;
 
     private short petrolCredits;
     private short incomingPetrolQuota;
@@ -132,6 +131,7 @@ public class CardApplet extends Applet implements ISO7816 {
     // 0x03 terminal authenticated as TCons
     // 0x04 card has been revoked
     // 0x1. card is in a charging operation
+    // 0x2. card is in rekeying operation
     // 0x0f authentication initiated, session key exchanged
     // User authentication is handled by the PIN class
     private byte[] status;
@@ -142,10 +142,9 @@ public class CardApplet extends Applet implements ISO7816 {
 
         status = JCSystem.makeTransientByteArray((short) 1, JCSystem.CLEAR_ON_RESET);
         keyExchBuffer = JCSystem.makeTransientByteArray((short) 20, JCSystem.CLEAR_ON_RESET);
-        sigBuffer = JCSystem.makeTransientByteArray((short) 30, JCSystem.CLEAR_ON_RESET);
         nonceC = JCSystem.makeTransientByteArray((short) NONCE_LENGTH, JCSystem.CLEAR_ON_RESET);
         nonceT = JCSystem.makeTransientByteArray((short) NONCE_LENGTH, JCSystem.CLEAR_ON_RESET);
-
+        rekeySCertBuffer = JCSystem.makeTransientByteArray((short) 58, JCSystem.CLEAR_ON_RESET);
 
         skey = (AESKey) KeyBuilder.buildKey(KeyBuilder.TYPE_AES_TRANSIENT_DESELECT, KeyBuilder.LENGTH_AES_128, true);
         pukTMan  = (ECPublicKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_F2M_PUBLIC, KeyBuilder.LENGTH_EC_F2M_193, true); // public key TMan
@@ -331,6 +330,7 @@ public class CardApplet extends Applet implements ISO7816 {
                 break;
             case 0x60:
                 // rekey
+                rekey(apdu, buffer);
                 break;
             case 0xf0:
                 //reset (connection)
@@ -361,7 +361,7 @@ public class CardApplet extends Applet implements ISO7816 {
     private boolean checkAndCopyTypeAndVersion(byte[] buffer) {
         short type = (short) (buffer[OFFSET_P1] & 0xff);
         boolean plausible = type < (short) 4 || type == (short) 0x0f; // The type should at least be in the right numeric range.
-        short s = (short) (status[(short) 0] & 0xff);
+        short s = (short) (status[(short) 0] & 0x0f);
 
         // Terminal type should stay the same as before, otherwise the authentication fails.
         if ((s != (short) 0x0f && s > (short) 4) || (s > (short) 0 && tInfo[(short) 0] != type) || !plausible) return false;
@@ -1063,7 +1063,6 @@ public class CardApplet extends Applet implements ISO7816 {
         }
 
         buffer = apdu.getBuffer();
-        System.out.printf("%x \n", status[(short) 0]);
 
         // if the terminal is authenticated, revoke the card
         if (((status[(short) 0] & 0xff) == 0x01) || ((status[(short) 0] & 0xff) == 0x02) || ((status[(short) 0] & 0xff) == 0x03) ) {
@@ -1080,6 +1079,53 @@ public class CardApplet extends Applet implements ISO7816 {
     }
 
     private void rekey(APDU apdu, byte[] buffer) {
-        
+        if (!checkAndCopyTypeAndVersion(buffer)) ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
+
+        short lc_length = apdu.setIncomingAndReceive();
+        if (lc_length != REKEY_INC_LENGTH0 && lc_length != REKEY_INC_LENGTH1) {
+            System.out.println(lc_length);
+
+            ISOException.throwIt((short) (SW_WRONG_LENGTH | REKEY_INC_LENGTH0));
+        }
+
+        // if the terminal is authenticated, rekey the card
+        if (((status[(short) 0] & 0x0f) == 0x01) || ((status[(short) 0] & 0x0f) == 0x02) || ((status[(short) 0] & 0x0f) == 0x03) ) {
+            buffer = apdu.getBuffer();
+
+            if ((status[(short) 0] & 0xf0) == 0) { // phase 0
+                JCSystem.beginTransaction();
+                Util.arrayCopy(buffer, (short) 5, rekeySCertBuffer, (short) 0, (short) 58);
+                status[(short) 0] = (byte) (status[(short) 0] | 0x20);
+                JCSystem.commitTransaction();
+                apdu.setOutgoingAndSend((short) 5, (short) 58);
+            } else if ((status[(short) 0] & 0xf0) == 0x20) { // phase 1
+                signature.init(purkc, Signature.MODE_VERIFY);
+                signature.update(rekeySCertBuffer, (short) 0, (short) 2);
+                if (signature.verify(buffer, (short) 5, (short) 228, rekeySCertBuffer, (short) 2, (short) 56)
+                        && Util.getShort(rekeySCertBuffer, (short) 0) > keyVersion) {
+                    JCSystem.beginTransaction();
+
+                    keyVersion = Util.getShort(rekeySCertBuffer, (short) 0);
+
+                    pukTMan.setW(buffer, PUKTMAN_PERS_OFFSET, EC_PUB_KEY_LENGTH);
+                    pukTChar.setW(buffer, PUKTCHAR_PERS_OFFSET, EC_PUB_KEY_LENGTH);
+                    pukTCons.setW(buffer, PUKTCONS_PERS_OFFSET, EC_PUB_KEY_LENGTH);
+                    pukc.setW(buffer, PUKC_PERS_OFFSET, EC_PUB_KEY_LENGTH);
+                    prkc.setS(buffer, PRKC_PERS_OFFSET, EC_PRIV_KEY_LENGTH);
+
+                    select(); // reset card and deauth terminal
+                    JCSystem.commitTransaction();
+
+                    ISOException.throwIt(SW_NO_ERROR);
+                } else if (Util.getShort(rekeySCertBuffer, (short) 0) <= keyVersion){
+                    ISOException.throwIt(SW_WARNING_STATE_UNCHANGED);
+                } else {
+                    select();
+                    ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
+                }
+            }
+        } else {
+            ISOException.throwIt(SW_WARNING_STATE_UNCHANGED);
+        }
     }
 }
