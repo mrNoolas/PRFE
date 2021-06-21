@@ -739,7 +739,7 @@ public class CardApplet extends Applet implements ISO7816 {
          */
 
         short lc_length = apdu.setIncomingAndReceive();
-	
+
         if (lc_length < (byte) CHAR1_INC_LEN) {
             ISOException.throwIt((short) (SW_WRONG_LENGTH | CHAR1_INC_LEN));
         }
@@ -749,32 +749,32 @@ public class CardApplet extends Applet implements ISO7816 {
         AESCipher.init(skey, Cipher.MODE_DECRYPT);
         AESCipher.doFinal(buffer, (short) 0, (short) 16, buffer, (short) 0);
 	Util.arrayCopyNonAtomic(buffer, (short) 0, nonceT, (short) 0, (short) 8);
-	
+
         incNonce(nonceT);
         tNum = (short) (tNum + 1);
 
         apdu.setOutgoing();
-	
+
 	//System.out.println(expectedLength);
         //if (expectedLength < (short) CHAR1_RESP_LEN) ISOException.throwIt((short) (SW_WRONG_LENGTH | CHAR1_RESP_LEN));
         apdu.setOutgoingLength((byte) CHAR1_RESP_LEN);
-	
+
         Util.arrayCopyNonAtomic(cID, (short) 0, buffer, (short) 0, (short) 4);
         buffer[(short) 4] = (byte) (petrolCredits & 0xff);
         buffer[(short) 5] = (byte) ((petrolCredits >> 8) & 0xff);
-        
+
         buffer[(short) 6] = (byte) (tNum & 0xff);
         buffer[(short) 7] = (byte) ((tNum >> 8) & 0xff);
         Util.arrayCopyNonAtomic(nonceT, (short) 0, buffer, (short) 8, (short) NONCE_LENGTH);
         // hash the data?
         signature.init(prkc, Signature.MODE_SIGN);
         signature.sign(buffer, (short) 0, (short) 16, buffer, (short) 8);
-	
+
         //apdu.setOutgoingAndSend((short) 0, (short) CHAR1_RESP_LEN);
-	
+
         status[(short) 0] = (byte) (status[(short) 0] + 0x10);
 	apdu.sendBytes((short) 0, (short) CHAR1_RESP_LEN);
-	
+
     }
 
     private void chargePhase2(APDU apdu, byte[] buffer) {
@@ -800,10 +800,10 @@ public class CardApplet extends Applet implements ISO7816 {
 	buffer = apdu.getBuffer();
 	signature.init(pukTChar, Signature.MODE_VERIFY);
 	signature.update(buffer, (short) 0, (short) 8);
-	
-	
+
+
 	incNonce(nonceT);
-	
+
 	if(!signature.verify(nonceT, (short) 0, (short) 8, buffer, (short) 8, SIGN_LENGTH)) {
 		ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
 
@@ -825,12 +825,12 @@ public class CardApplet extends Applet implements ISO7816 {
 	tNum = (short) (tNum + 1);
 	buffer[(short) 2] = (byte) (tNum & 0xff);
 	buffer[(short) 3] = (byte) ((tNum >> 8) & 0xff);
-	
-	
+
+
 	signature.sign(buffer, (short) 0, (short) 4, buffer, (short) 0);
-	
-	
-	
+
+
+
 
 
 
@@ -840,8 +840,8 @@ public class CardApplet extends Applet implements ISO7816 {
 
 	status[(short) 0] = (byte) (status[(short) 0] - 0x10);
 	apdu.setOutgoingAndSend((short) 0, (short) CHAR2_RESP_LEN);
-		
-        
+
+
     }
 
     private void consume(APDU apdu, byte[] buffer) {
@@ -888,10 +888,15 @@ public class CardApplet extends Applet implements ISO7816 {
         //hashedData = hash(card-id, petrolCredits, nonceC) -> hashing algorithm? SHA-1?
 
         //copy data to be hashed into sigbuffer
-        Util.arrayCopyNonAtomic(cID, (short) 0, sigBuffer, (short) 0, (short) 4);
-        Util.setShort(sigBuffer, (short) 4, petrolCredits);
-        Util.arrayCopyNonAtomic(nonceT, (short) 0, sigBuffer, (short) 6, (short) NONCE_LENGTH);
-        Util.setShort(sigBuffer, (short) 14, tNum);
+        signature.init(puks, Signature.MODE_VERIFY);
+        signature.update(cID, (short) 0, ID_LENGTH);
+        //Util.arrayCopyNonAtomic(cID, (short) 0, sigBuffer, (short) 0, (short) 4);
+        signature.update(petrolCredits);
+        //Util.setShort(sigBuffer, (short) 4, petrolCredits);
+        signature.update(nonceT);
+        //Util.arrayCopyNonAtomic(nonceT, (short) 0, sigBuffer, (short) 6, (short) NONCE_LENGTH);
+        signature.update(tNum);
+        //Util.setShort(sigBuffer, (short) 14, tNum);
 
       //  //hash the data with hashing algorithm
 //        MessageDigest md = MessageDigest.getInstance(MessageDigest.ALG_SHA, false); // TODO: hash algorithm? SHA-1 gives 20-bytes?
