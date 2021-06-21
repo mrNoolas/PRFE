@@ -230,7 +230,9 @@ public abstract class PRFETerminal extends JPanel implements ActionListener {
          *  4 bytes card ID
          *  2 bytes petrolcredits
          */
+
         byte[] data = response.getData();
+
 
         cardType = data[0];
         cardSoftVers = data[1];
@@ -602,8 +604,8 @@ public abstract class PRFETerminal extends JPanel implements ActionListener {
         if ((data[0] & 0xff) == 0x90 && data[1] == 0) {
             System.out.println("Rekeyed Succesfully");
             return "Rekeyed Succesfully";
-        }
-        return "Rekey not accepted by card";
+        } 
+        return "Rekey not accepted by card"; 
     }
 
     public abstract Dimension getPreferredSize();
