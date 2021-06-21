@@ -231,7 +231,7 @@ public class TCons extends PRFETerminal {
         System.arraycopy(nonceC, 0, sigBuffer, 6, NONCET_LENGTH);
 
         AESCipher.init(skey, Cipher.MODE_DECRYPT);
-        AESCipher.doFinal(data, (short) 6, (short) SIGN_LENGTH, sigBuffer, (short) 14)
+        AESCipher.doFinal(data, (short) 6, (short) SIGN_LENGTH, sigBuffer, (short) 14);
         if ((Util.arrayCompare(sigBuffer, (short) 0, sigBuffer, (short) 14, (short) 14)) != (byte) 0) {
             return "Signature invalid";
         }

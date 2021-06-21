@@ -963,10 +963,10 @@ public class CardApplet extends Applet implements ISO7816 {
         Util.arrayCopyNonAtomic(buffer, (short) 6, nonceT, (short) 0, (short) NONCE_LENGTH);
 
         AESCipher.init(skey, Cipher.MODE_DECRYPT);
-        AESCipher.doFinal(buffer, (short) 0, buffer, (short) 0, (short) 14);
+        AESCipher.doFinal(buffer, (short) 0, (short) 14, buffer, (short) 0);
         byte verifyByte = Util.arrayCompare(buffer, (short) 0, sigBuffer, (short) 0, (short) 14);
         //if verified, we update the petrolcredits on the card, otherwise we skip this step
-        if (verifyByte = 0){
+        if (verifyByte == 0){
             petrolCredits = (short) (petrolCredits - incomingPetrolQuota);
         }
 
@@ -982,7 +982,7 @@ public class CardApplet extends Applet implements ISO7816 {
         md.doFinal(sigBuffer, (short) 0, (short) 13, sigBuffer, (short) 0);
 
         //sign hashed data
-        AESCipher.init(skey, Signature.MODE_ENCRYPT);
+        AESCipher.init(skey, Cipher.MODE_ENCRYPT);
         AESCipher.doFinal(sigBuffer, (short) 0, (short) 20, sigBuffer, (short) 0);
 
         //verified = 1 byte, signature = 56?
@@ -1022,11 +1022,11 @@ public class CardApplet extends Applet implements ISO7816 {
         Util.setShort(sigBuffer, (short) 4, incomingPetrolQuota); //set incoming petrol credit value
         Util.arrayCopyNonAtomic(buffer, (short) 6, nonceT, (short) 0, (short) NONCE_LENGTH); //sequence number
 
-        AESCipher.init(skey, Signature.MODE_DECRYPT);
-        AESCipher.doFinal(buffer, (short) 6, buffer, (short) 6, (short) 14);
+        AESCipher.init(skey, Cipher.MODE_DECRYPT);
+        AESCipher.doFinal(buffer, (short) 6, (short) 14, buffer, (short) 6);
         byte verified = Util.arrayCompare(sigBuffer, (short) 0, buffer, (short) 6, (short) 14);
 
-        if(verified = (byte) 0){
+        if(verified == (byte) 0){
             if ((short) incomingPetrolQuota < (short) petrolCredits){
                 petrolCredits = (short) (petrolCredits + incomingPetrolQuota);
             }
