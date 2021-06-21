@@ -29,7 +29,7 @@ public class CardApplet extends Applet implements ISO7816 {
 
     private static final short CHAR1_INC_LEN = 56;
     private static final short CHAR2_INC_LEN = 64;
-    private static final short CONS1_INC_LENGTH = 8;
+    private static final short CONS1_INC_LENGTH = 16;
     private static final short CONS2_INC_LENGTH = 22;
     private static final short CONS3_INC_LENGTH = 22;
 
@@ -41,7 +41,7 @@ public class CardApplet extends Applet implements ISO7816 {
 
     private static final short CHAR1_RESP_LEN = 64;
     private static final short CHAR2_RESP_LEN = 112;
-    private static final short CONS1_RESP_LEN = 22;
+    private static final short CONS1_RESP_LEN = 22; //TODO: change outgoing length of messages
     private static final short CONS2_RESP_LEN = 22;
     private static final short CONS3_RESP_LEN = 32;
 
@@ -262,8 +262,8 @@ public class CardApplet extends Applet implements ISO7816 {
                  * Lc: CONSUME_INC_LENGTH
                  * Data: encryption of NonceT
                  */
-/* TODO: sorry, I added this for some testing... (Also look at the break at the end. Cheers, David
-        if(!checkAndCopyTypeAndVersion(buffer)) ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
+// TODO: sorry, I added this for some testing... (Also look at the break at the end. Cheers, David
+        //if(!checkAndCopyTypeAndVersion(buffer)) ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
 
         if(!checkAndCopyTypeAndVersion(buffer)) {
             //reset status:
@@ -275,9 +275,6 @@ public class CardApplet extends Applet implements ISO7816 {
         else{
             consume(apdu, buffer);
         }
- */
-
-
                 break;
 
 
@@ -852,7 +849,7 @@ public class CardApplet extends Applet implements ISO7816 {
                 break;
         }
     }
-/*
+
     private void consumePhase1(APDU apdu, byte[] buffer) {
 
         short lc_length = apdu.setIncomingAndReceive();
@@ -862,30 +859,34 @@ public class CardApplet extends Applet implements ISO7816 {
 
         buffer = apdu.getBuffer();
 
+
+
         // Decrypt into nonceT
         AESCipher.init(skey, Cipher.MODE_DECRYPT);
         AESCipher.doFinal(buffer, (short) 0, (short) 8, nonceT, (short) 0);
 
         //card sends back to the terminal:
-        //card-id (4 bytes), petrolcredits (short), mac(hash{card-id, petrolCredits, incNonce(nonceT)}, skey -> signature length?
+        //card-id (4 bytes), petrolcredits (short), tnum, mac(hash{card-id, petrolCredits, incNonce(nonceT)}, skey -> signature length?
 
 
         incNonce(nonceT); //sequence nr + 1
         nonceC = nonceT;
+        tNum = (short) (tNum + 1);
         //hashedData = hash(card-id, petrolCredits, nonceC) -> hashing algorithm? SHA-1?
 
         //copy data to be hashed into sigbuffer
         Util.arrayCopyNonAtomic(cID, (short) 0, sigBuffer, (short) 0, (short) 4);
         Util.setShort(sigBuffer, (short) 4, petrolCredits);
         Util.arrayCopyNonAtomic(nonceT, (short) 0, sigBuffer, (short) 6, (short) NONCE_LENGTH);
+        Util.setShort(sigBuffer, (short) 14, tNum);
 
-        //hash the data with hashing algorithm
-        MessageDigest md = MessageDigest.getInstance(MessageDigest.ALG_SHA, false); // TODO: hash algorithm? SHA-1 gives 20-bytes?
-        md.doFinal(sigBuffer, (short) 0, (short) 14, sigBuffer, (short) 0);
+      //  //hash the data with hashing algorithm
+//        MessageDigest md = MessageDigest.getInstance(MessageDigest.ALG_SHA, false); // TODO: hash algorithm? SHA-1 gives 20-bytes?
+//        md.doFinal(sigBuffer, (short) 0, (short) 14, sigBuffer, (short) 0);
 
         //construct sign data
         AESCipher.init(skey, Cipher.MODE_ENCRYPT);
-        AESCipher.doFinal(sigBuffer, (short) 0, (short) 20, sigBuffer, (short) 0);
+        AESCipher.doFinal(sigBuffer, (short) 0, (short) 16, sigBuffer, (short) 0);
 
         short expectedLength = apdu.setOutgoing();
 
@@ -1034,7 +1035,7 @@ public class CardApplet extends Applet implements ISO7816 {
             ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
         }
 
-    }*/
+    }
 
     /**
      * Revokes the validity of the card.
