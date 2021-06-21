@@ -282,40 +282,7 @@ public class CardApplet extends Applet implements ISO7816 {
 
 
             case 0x40:
-                /* REVOKE instruction:
-                 *
-                 * This instruction can be executed at any authenticated terminal.
-                 *
-                 * INS: 0x40
-                 * P1: Terminal Type
-                 * P2: Terminal Software Version
-                 * Lc: should be REVOKE_INC_LENGTH
-                 * Data: Signature over the revoke operation
-                 */
-
-                if (!checkAndCopyTypeAndVersion(buffer)) ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
-
-                lc_length = apdu.setIncomingAndReceive();
-                if (lc_length < (byte) REVOKE_INC_LENGTH) {
-                    ISOException.throwIt((short) (SW_WRONG_LENGTH | REVOKE_INC_LENGTH));
-                }
-
-                buffer = apdu.getBuffer();
-                System.out.printf("%x \n", status[(short) 0]);
-
-                // if the terminal is authenticated, revoke the card
-                if (((status[(short) 0] & 0xff) == 0x01) || ((status[(short) 0] & 0xff) == 0x02) || ((status[(short) 0] & 0xff) == 0x03) ) {
-                    tInfo[(short) 1] = buffer[OFFSET_P1];
-
-                    signature.init(puks, Signature.MODE_VERIFY);
-                    signature.update(cID, (short) 0, ID_LENGTH);
-                    if (!signature.verify(SERVER_REV_INFO, (short) 0, (short) 13, buffer, (short) 5, SIGN_LENGTH)) {
-                        ISOException.throwIt(SW_WRONG_DATA);
-                    }
-                    status[(short) 0] = (byte) 0x04; // Card status is now revoked
-                    ISOException.throwIt(SW_NO_ERROR);
-                }
-
+                revoke(apdu, buffer);
                 break;
             case 0x50:
                 /*
@@ -871,20 +838,21 @@ public class CardApplet extends Applet implements ISO7816 {
 
         switch (status[(short) 0] & 0xf0) {
             case 0x00:
-                consumePhase1(apdu, buffer);
+                //consumePhase1(apdu, buffer);
                 break;
             case 0x10:
-                consumePhase2(apdu, buffer);
+                //consumePhase2(apdu, buffer);
                 break;
             case 0x20:
-                consumePhase3(apdu, buffer);
+                //consumePhase3(apdu, buffer);
+                break;
             default:
                 select();
                 ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
                 break;
         }
     }
-
+/*
     private void consumePhase1(APDU apdu, byte[] buffer) {
 
         short lc_length = apdu.setIncomingAndReceive();
@@ -1066,7 +1034,7 @@ public class CardApplet extends Applet implements ISO7816 {
             ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
         }
 
-    }
+    }*/
 
     /**
      * Revokes the validity of the card.
@@ -1075,7 +1043,42 @@ public class CardApplet extends Applet implements ISO7816 {
      * Assumes that the validity of the revoking instruction certificate has been checked.
      */
     private void revoke(APDU apdu, byte[] buffer) {
+        /* REVOKE instruction:
+         *
+         * This instruction can be executed at any authenticated terminal.
+         *
+         * INS: 0x40
+         * P1: Terminal Type
+         * P2: Terminal Software Version
+         * Lc: should be REVOKE_INC_LENGTH
+         * Data: Signature over the revoke operation
+         */
 
+        if (!checkAndCopyTypeAndVersion(buffer)) ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
 
+        short lc_length = apdu.setIncomingAndReceive();
+        if (lc_length < (byte) REVOKE_INC_LENGTH) {
+            ISOException.throwIt((short) (SW_WRONG_LENGTH | REVOKE_INC_LENGTH));
+        }
+
+        buffer = apdu.getBuffer();
+        System.out.printf("%x \n", status[(short) 0]);
+
+        // if the terminal is authenticated, revoke the card
+        if (((status[(short) 0] & 0xff) == 0x01) || ((status[(short) 0] & 0xff) == 0x02) || ((status[(short) 0] & 0xff) == 0x03) ) {
+            tInfo[(short) 1] = buffer[OFFSET_P1];
+
+            signature.init(puks, Signature.MODE_VERIFY);
+            signature.update(cID, (short) 0, ID_LENGTH);
+            if (!signature.verify(SERVER_REV_INFO, (short) 0, (short) 13, buffer, (short) 5, SIGN_LENGTH)) {
+                ISOException.throwIt(SW_WRONG_DATA);
+            }
+            status[(short) 0] = (byte) 0x04; // Card status is now revoked
+            ISOException.throwIt(SW_NO_ERROR);
+        }
+    }
+
+    private void rekey(APDU apdu, byte[] buffer) {
+        
     }
 }

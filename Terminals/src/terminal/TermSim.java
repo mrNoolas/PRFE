@@ -70,6 +70,8 @@ public class TermSim {
     private KeyPair ServerKP; // Note: for this POC terminals also act as server.
     private KeyPair CardKP;
     private KeyPair ReCardKP;
+    private byte[] rekeySign = new byte[58];
+    private short keySetVersion = 0;
 
     private Signature signature;
 
@@ -80,6 +82,8 @@ public class TermSim {
 
     public TermSim (JFrame tManParent, JFrame tConsParent, JFrame tCharParent) {
         revokedCards = new HashSet();
+
+        signature = Signature.getInstance(Signature.ALG_ECDSA_SHA, false);
 
         TManKP = new KeyPair(KeyPair.ALG_EC_F2M, (short) 193);
         TCharKP = new KeyPair(KeyPair.ALG_EC_F2M, (short) 193);
@@ -96,7 +100,18 @@ public class TermSim {
         CardKP.genKeyPair();
         ReCardKP.genKeyPair();
 
-        signature = Signature.getInstance(Signature.ALG_ECDSA_SHA, false);
+        signature.init(ReCardKP.getPrivate(), Signature.MODE_SIGN);
+        rekeySign[0] = (byte) (keySetVersion & 0xff);
+        rekeySign[1] = (byte) ((keySetVersion >> 8) & 0xff);
+        signature.update(rekeySign, (short) 0, (short) 2);
+
+        byte[] buffer = new byte[228];
+        ((ECPublicKey) TManKP.getPublic()).getW(buffer, (short) 0);
+        ((ECPublicKey) TCharKP.getPublic()).getW(buffer, (short) 51);
+        ((ECPublicKey) TConsKP.getPublic()).getW(buffer, (short) 102);
+        ((ECPublicKey) CardKP.getPublic()).getW(buffer, (short) 153);
+        ((ECPrivateKey) CardKP.getPrivate()).getS(buffer, (short) 204);
+        signature.sign(buffer, (short) 0, (short) 228, rekeySign, (short) 2);
 
         // Setup Terminals TODO: reduce the keys that are given to each terminal
         tMan = new TMan(tManParent, TManKP, TCharKP, TConsKP, ServerKP, CardKP, ReCardKP);
@@ -229,6 +244,59 @@ public class TermSim {
 
         public boolean isRevokedCard(byte[] cardID) {
             return revokedCards.contains(cardID);
+        }
+
+        public byte[] getRekeySignature() {
+            return rekeySign;
+        }
+
+        public short requestRekey(boolean rekeyCard, boolean rekeyTMan, boolean rekeyTChar, boolean rekeyTCons) {
+            if (rekeyCard || rekeyTChar || rekeyTCons || rekeyTMan) {
+                keySetVersion++;
+
+                if (rekeyTMan) {
+                    TManKP.genKeyPair();
+                    tMan.TMan = TManKP;
+                    tCons.TMan = TManKP;
+                    tChar.TMan = TManKP;
+                }
+                if (rekeyTChar) {
+                    TCharKP.genKeyPair();
+                    tMan.TChar = TCharKP;
+                    tCons.TChar = TCharKP;
+                    tChar.TChar = TCharKP;
+                }
+                if (rekeyTCons) {
+                    TConsKP.genKeyPair();
+                    tMan.TCons = TConsKP;
+                    tCons.TCons = TConsKP;
+                    tChar.TCons = TConsKP;
+                }
+                //ServerKP.genKeyPair();
+                if (rekeyCard) {
+                    CardKP.genKeyPair();
+                    //ReCardKP.genKeyPair();
+
+                    tMan.Card = CardKP;
+                    tCons.Card = CardKP;
+                    tChar.Card = CardKP;
+                }
+
+                signature.init(ReCardKP.getPrivate(), Signature.MODE_SIGN);
+                rekeySign[0] = (byte) (keySetVersion & 0xff);
+                rekeySign[1] = (byte) ((keySetVersion >> 8) & 0xff);
+                signature.update(rekeySign, (short) 0, (short) 2);
+
+                byte[] buffer = new byte[228];
+                ((ECPublicKey) TManKP.getPublic()).getW(buffer, (short) 0);
+                ((ECPublicKey) TCharKP.getPublic()).getW(buffer, (short) 51);
+                ((ECPublicKey) TConsKP.getPublic()).getW(buffer, (short) 102);
+                ((ECPublicKey) CardKP.getPublic()).getW(buffer, (short) 153);
+                ((ECPrivateKey) CardKP.getPrivate()).getS(buffer, (short) 204);
+                signature.sign(buffer, (short) 0, (short) 228, rekeySign, (short) 2);
+            }
+
+            return keySetVersion;
         }
     }
 
