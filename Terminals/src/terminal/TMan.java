@@ -109,7 +109,11 @@ public class TMan extends PRFETerminal {
                         resetConnection();
                         break;
                     case "Authenticate": // authenticate
-                        setText(authenticate(T_TYPE, T_SOFT_VERSION, T_ID));
+                        if(switchCallback.isRevokedCard(cardID)) {
+                          setText("Revoked card");
+                        } else {
+                          setText(authenticate(T_TYPE, T_SOFT_VERSION, T_ID));
+                        }
                         break;
                     case "Personalise":
                         setText(personalise());
@@ -163,12 +167,12 @@ public class TMan extends PRFETerminal {
 
         System.arraycopy(CCertExp, 0, buffer1, 158, 4);
         System.arraycopy(cardID, 0, buffer1, 162, 4);
-        
+
         // Generate random 6 digit pin using SecureRandom
         byte[] pin = new byte[6];
         SecureRandom random = new SecureRandom();
         int pinInt = random.nextInt(1000000);
-        
+
         pin[0] = (byte) (pinInt - (pinInt % 100000));
         pin[1] = (byte) ((pinInt % 100000) - (pinInt % 10000));
         pin[2] = (byte) ((pinInt % 10000) - (pinInt % 1000));
@@ -176,7 +180,7 @@ public class TMan extends PRFETerminal {
         pin[4] = (byte) ((pinInt % 100) - (pinInt % 10));
         pin[5] = (byte) (pinInt % 10);
         System.arraycopy(pin, 0, buffer1, 166, 6);
-        
+
 
         ResponseAPDU response;
         CommandAPDU readCommand = new CommandAPDU(PRFE_CLA, PERS_INS, (byte) 1, T_SOFT_VERSION, buffer0, 0, 228, 228);
@@ -189,7 +193,7 @@ public class TMan extends PRFETerminal {
             return "ERROR: cardException";
         }
         // Check that the response is the same as what was sent:
-        byte[] data = response.getBytes(); 
+        byte[] data = response.getBytes();
         if (data[0] == 0x62 && data[1] == 0) {
             return "Warning: Card not manageable!";
         }
@@ -214,7 +218,7 @@ public class TMan extends PRFETerminal {
             return "ERROR: cardException";
         }
         // Check that the response is the same as what was sent:
-        data = response.getData(); 
+        data = response.getData();
         byte[] dataTrunc1 = Arrays.copyOfRange(data, 0, 172);
         if (!Arrays.equals(buffer1, dataTrunc1)) {
             /*for (int i = 0; i < 172; i++) {

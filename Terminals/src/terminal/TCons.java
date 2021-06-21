@@ -149,8 +149,12 @@ public class TCons extends PRFETerminal {
                         setText(readCard(T_TYPE, T_SOFT_VERSION, T_ID));
                         break;
                     case "Authenticate": // authenticate
-                        setText(authenticate(T_TYPE, T_SOFT_VERSION, T_ID));
-                        resetSession();
+                        if(switchCallback.isRevokedCard(cardID)) {
+                          setText("Revoked card");
+                        } else {
+                          setText(authenticate(T_TYPE, T_SOFT_VERSION, T_ID));
+                          resetSession();
+                        }
                         break;
                     case "Quit":
                         System.exit(0);

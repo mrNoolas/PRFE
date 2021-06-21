@@ -1,4 +1,4 @@
- package terminal;
+package terminal;
 
 import javacard.security.*;
 import javacard.framework.*;
@@ -92,8 +92,8 @@ public abstract class PRFETerminal extends JPanel implements ActionListener {
     protected byte[] CCert;            // Server certificate verification key
     protected byte[] CCertExp = {(byte) 0x07, (byte) 0xe6, (byte) 0x01, (byte) 0x01}; // yymd: 2022-01-01
 
-	protected byte[] TCert = new byte[56];
-	protected byte[] TCertExp;
+	  protected byte[] TCert = new byte[56];
+	  protected byte[] TCertExp;
 
     protected KeyAgreement ECExch;
     protected Cipher AESCipher;
@@ -174,7 +174,7 @@ public abstract class PRFETerminal extends JPanel implements ActionListener {
         authenticated = false;
         cardType = 0;
         petrolQuota = 0;
-        
+
         nonceC = new byte[] {0,0,0,0, 0,0,0,0};
         nonceT = new byte[] {0,0,0,0, 0,0,0,0};
     }
@@ -195,7 +195,7 @@ public abstract class PRFETerminal extends JPanel implements ActionListener {
         }
         // Any remaining carry is just ignored.
     }
-    
+
     public int readCard(byte termType, byte termSoftVers, byte[] termID) {                                                 //default method, read information on card
         resetConnection();
 
@@ -213,7 +213,7 @@ public abstract class PRFETerminal extends JPanel implements ActionListener {
         }
 
         System.out.println("PRFE Terminal");
-        /* 
+        /*
          * process the response apdu
          *
          * data:
@@ -222,7 +222,7 @@ public abstract class PRFETerminal extends JPanel implements ActionListener {
          *  4 bytes card ID
          *  2 bytes petrolcredits
          */
-        byte[] data = response.getData(); 
+        byte[] data = response.getData();
 
         cardType = data[0];
         cardSoftVers = data[1];
@@ -230,7 +230,7 @@ public abstract class PRFETerminal extends JPanel implements ActionListener {
         System.arraycopy(data, 2, cardID, 0, 4);
         petrolQuota = (int) Util.getShort(data, (short) 6);
 
-        System.out.printf("Read response from Card: Type: %x; Soft Vers: %x; ID: %x%x%x%x; Petrolquota: %x \n", 
+        System.out.printf("Read response from Card: Type: %x; Soft Vers: %x; ID: %x%x%x%x; Petrolquota: %x \n",
                 cardType, cardSoftVers, cardID[0], cardID[1], cardID[2], cardID[3], petrolQuota);
         return (int) petrolQuota;
     }
@@ -246,12 +246,12 @@ public abstract class PRFETerminal extends JPanel implements ActionListener {
                 termKeys = TChar;
                 break;
             case 0x03:
-                termKeys = TCons;            
+                termKeys = TCons;
                 break;
             default:
                 return "Error: terminal type unsupported for authentication";
         }
-    
+
         // First initialise the session key
         resetConnection();
         byte[] buffer = new byte[93];
@@ -280,7 +280,7 @@ public abstract class PRFETerminal extends JPanel implements ActionListener {
             return "Transmit Error";
         }
 
-        /* 
+        /*
          * process the response apdu
          *
          * data:
@@ -298,7 +298,7 @@ public abstract class PRFETerminal extends JPanel implements ActionListener {
             return "Warning, terminal already authenticated";
         }
 
-        data = response.getData(); 
+        data = response.getData();
         ECExch.init(keyExchangeKP.getPrivate());
         byte[] keyExchBuffer = new byte[20];
         ECExch.generateSecret(data, (short) 0, (short) 33, keyExchBuffer, (short) 0);
@@ -307,7 +307,7 @@ public abstract class PRFETerminal extends JPanel implements ActionListener {
 
         // First decrypt the buffer
         AESCipher.init(skey, Cipher.MODE_DECRYPT);
-        AESCipher.doFinal(data, (short) 33, (short) 128, data, (short) 33); 
+        AESCipher.doFinal(data, (short) 33, (short) 128, data, (short) 33);
 
         // Then verify the message signature
         signature.init(Card.getPublic(), Signature.MODE_VERIFY);
@@ -346,7 +346,7 @@ public abstract class PRFETerminal extends JPanel implements ActionListener {
         SecureRandom random = new SecureRandom();
         random.nextBytes(nonceT);
 
-        System.arraycopy(nonceT, 0, buffer, 4, 8);  
+        System.arraycopy(nonceT, 0, buffer, 4, 8);
 
         // Then increment the card nonce
         incNonce(nonceC);
@@ -370,7 +370,7 @@ public abstract class PRFETerminal extends JPanel implements ActionListener {
         signature.sign(buffer, (short) 0, (short) 80, buffer, (short) 80);
 
         /*
-         * For some reason AES does not want to encrypt 17 (or 19) blocks, 
+         * For some reason AES does not want to encrypt 17 (or 19) blocks,
          * so we add a block of 0's to the end... We do not know why :(
          */
         // encrypt message
@@ -392,12 +392,12 @@ public abstract class PRFETerminal extends JPanel implements ActionListener {
         }
 
 
-        /* 
+        /*
          * process the response apdu
          *
          * data:
          *  8 bytes nonceT
-         */ 
+         */
         data = response.getData();
         AESCipher.init(skey, Cipher.MODE_DECRYPT);
         AESCipher.doFinal(data, (short) 0, (short) 16, data, (short) 0);
@@ -412,7 +412,7 @@ public abstract class PRFETerminal extends JPanel implements ActionListener {
             resetConnection();
             return "NonceT returned incorrectly, authentication unsuccesful";
         }
-        
+
         System.out.println("Authentication Successful");
         return "Authentication Successful";
     }
