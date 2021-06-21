@@ -739,35 +739,42 @@ public class CardApplet extends Applet implements ISO7816 {
          */
 
         short lc_length = apdu.setIncomingAndReceive();
+	
         if (lc_length < (byte) CHAR1_INC_LEN) {
             ISOException.throwIt((short) (SW_WRONG_LENGTH | CHAR1_INC_LEN));
         }
 
         buffer = apdu.getBuffer();
+
         AESCipher.init(skey, Cipher.MODE_DECRYPT);
-        AESCipher.doFinal(buffer, (short) 0, SIGN_LENGTH, nonceT, (short) 0);
+        AESCipher.doFinal(buffer, (short) 0, (short) 16, buffer, (short) 0);
+	Util.arrayCopyNonAtomic(buffer, (short) 0, nonceT, (short) 0, (short) 8);
+	
         incNonce(nonceT);
         tNum = (short) (tNum + 1);
 
-        short expectedLength = apdu.setOutgoing();
-        if (expectedLength < (short) CHAR1_RESP_LEN) ISOException.throwIt((short) (SW_WRONG_LENGTH | CHAR1_RESP_LEN));
+        apdu.setOutgoing();
+	
+	//System.out.println(expectedLength);
+        //if (expectedLength < (short) CHAR1_RESP_LEN) ISOException.throwIt((short) (SW_WRONG_LENGTH | CHAR1_RESP_LEN));
         apdu.setOutgoingLength((byte) CHAR1_RESP_LEN);
-
-        Util.arrayCopy(cID, (short) 0, buffer, (short) 0, (short) 4);
-        buffer[(short) 5] = (byte) (petrolCredits & 0xff);
-        buffer[(short) 6] = (byte) ((petrolCredits >> 8) & 0xff);
-        incNonce(nonceT);
-        buffer[(short) 7] = (byte) (tNum & 0xff);
-        buffer[(short) 8] = (byte) ((tNum >> 8) & 0xff);
-        Util.arrayCopy(nonceT, (short) 0, buffer, (short) 8, (short) NONCE_LENGTH);
+	
+        Util.arrayCopyNonAtomic(cID, (short) 0, buffer, (short) 0, (short) 4);
+        buffer[(short) 4] = (byte) (petrolCredits & 0xff);
+        buffer[(short) 5] = (byte) ((petrolCredits >> 8) & 0xff);
+        
+        buffer[(short) 6] = (byte) (tNum & 0xff);
+        buffer[(short) 7] = (byte) ((tNum >> 8) & 0xff);
+        Util.arrayCopyNonAtomic(nonceT, (short) 0, buffer, (short) 8, (short) NONCE_LENGTH);
         // hash the data?
-        signature.init(skey, Signature.MODE_SIGN);
+        signature.init(prkc, Signature.MODE_SIGN);
         signature.sign(buffer, (short) 0, (short) 16, buffer, (short) 8);
-
-        apdu.setOutgoingAndSend((short) 0, (short) CHAR1_RESP_LEN);
+	
+        //apdu.setOutgoingAndSend((short) 0, (short) CHAR1_RESP_LEN);
+	
         status[(short) 0] = (byte) (status[(short) 0] + 0x10);
-
-
+	apdu.sendBytes((short) 0, (short) CHAR1_RESP_LEN);
+	
     }
 
     private void chargePhase2(APDU apdu, byte[] buffer) {
@@ -785,50 +792,56 @@ public class CardApplet extends Applet implements ISO7816 {
          *      2 bytes of transaction number
          *		56 bytes of signature of the data
          */
-	/*	short lc_length = apdu.setIncomingAndReceive();
+	short lc_length = apdu.setIncomingAndReceive();
         if (lc_length < (byte) CHAR2_INC_LEN) {
             ISOException.throwIt((short) (SW_WRONG_LENGTH | CHAR2_INC_LEN));
         }
 
-		buffer = apdu.getBuffer();
-		Util.arrayCopy(buffer, (short) 0, sigBuffer, (short) 0, (short) 8);
-		incNonce(nonceT);
-		Util.arrayCopy(nonceT, (short) 0, sigBuffer, (short) 8, (short) NONCE_LENGTH);
+	buffer = apdu.getBuffer();
+	signature.init(pukTChar, Signature.MODE_VERIFY);
+	signature.update(buffer, (short) 0, (short) 8);
+	
+	
+	incNonce(nonceT);
+	
+	if(!signature.verify(nonceT, (short) 0, (short) 8, buffer, (short) 8, SIGN_LENGTH)) {
+		ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
 
 
 
-		signature.init(skey, Signature.MODE_VERIFY);
-		if(!signature.verify(sigBuffer, (short) 0, (short) 16, buffer, (short) 16, SIGN_LENGTH)) {
-			ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
+	}
+	petrolCredits = (short) (petrolCredits + buffer[(short) 5]);
+	petrolCredits = (short) (petrolCredits + (buffer[(short) 6]<< 8));
+
+
+	short expectedLength = apdu.setOutgoing();
+	if (expectedLength < (short) CHAR2_RESP_LEN) ISOException.throwIt((short) (SW_WRONG_LENGTH | CHAR2_RESP_LEN));
+	apdu.setOutgoingLength((byte) CHAR2_RESP_LEN);
+	signature.init(prkc, Signature.MODE_SIGN);
+	signature.update(cID, (short) 0, (short) 4);
+	signature.update(TCert, (short) 0, (short) 56);
+	buffer[(short) 0] = (byte) (petrolCredits & 0xff);
+	buffer[(short) 1] = (byte)  ((petrolCredits >> 8) & 0xff);
+	tNum = (short) (tNum + 1);
+	buffer[(short) 2] = (byte) (tNum & 0xff);
+	buffer[(short) 3] = (byte) ((tNum >> 8) & 0xff);
+	
+	
+	signature.sign(buffer, (short) 0, (short) 4, buffer, (short) 0);
+	
+	
+	
 
 
 
-		}
-		petrolCredits = (short) (petrolCredits + buffer[(short) 5]);
-		petrolCredits = (short) (petrolCredits + (buffer[(short) 6]<< 8));
+	incNonce(nonceT);
+	signature.init(prkc, Signature.MODE_SIGN);
+	signature.sign(nonceT, (short) 0, NONCE_LENGTH, buffer, SIGN_LENGTH);
 
-
-		short expectedLength = apdu.setOutgoing();
-        if (expectedLength < (short) CHAR2_RESP_LEN) ISOException.throwIt((short) (SW_WRONG_LENGTH | CHAR2_RESP_LEN));
-        apdu.setOutgoingLength((byte) CHAR2_RESP_LEN);
-
-		Util.arrayCopy(cID, (short) 0, sigBuffer, (short) 0, (short) 4);
-		Util.arrayCopy(TCert, (short) 0, sigBuffer, (short) 4, (short) SIGN_LENGTH);
-		sigBuffer[(short) 20] = (byte) (petrolCredits & 0xff);
-		sigBuffer[(short) 21] = (byte) ((petrolCredits >> 8) & 0xff);
-		tNum = (short) (tNum + 1);
-		sigBuffer[(short) 22] = (byte) (tNum & 0xff);
-		sigBuffer[(short) 23] = (byte) ((tNum >> 8) & 0xff);
-
-		signature.init(skey, Signature.MODE_SIGN);
-		signature.sign(sigBuffer, (short) 0, (short) 24, buffer, (short) 0);
-
-		incNonce(nonceT);
-		signature.sign(nonceT, (short) 0, NONCE_LENGTH, buffer, SIGN_LENGTH);
-
-		apdu.setOutgoingAndSend((short) 0, (short) CHAR2_RESP_LEN);
-		status[(short) 0] = (byte) (status[(short) 0] - 0x10);
-        */
+	status[(short) 0] = (byte) (status[(short) 0] - 0x10);
+	apdu.setOutgoingAndSend((short) 0, (short) CHAR2_RESP_LEN);
+		
+        
     }
 
     private void consume(APDU apdu, byte[] buffer) {

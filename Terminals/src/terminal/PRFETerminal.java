@@ -223,7 +223,9 @@ public abstract class PRFETerminal extends JPanel implements ActionListener {
          *  4 bytes card ID
          *  2 bytes petrolcredits
          */
+
         byte[] data = response.getData();
+
 
         cardType = data[0];
         cardSoftVers = data[1];
