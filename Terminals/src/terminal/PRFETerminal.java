@@ -62,6 +62,8 @@ public abstract class PRFETerminal extends JPanel implements ActionListener {
 
     CardChannel applet;
 
+    protected int pin = 0;
+
     // Data about this terminal:
     public byte T_TYPE;
     public byte T_SOFT_VERSION;
@@ -71,6 +73,7 @@ public abstract class PRFETerminal extends JPanel implements ActionListener {
     static final byte PRFE_CLA = (byte) 0xb0;
     static final byte READ_INS = (byte) 0x00;
     static final byte AUTH_INS = (byte) 0x10;
+    static final byte AUTH_BUY_INS = (byte) 0x70;
     static final byte REV_INS = (byte) 0x40;
     static final byte REKEY_INS = (byte) 0x60;
 
@@ -105,6 +108,7 @@ public abstract class PRFETerminal extends JPanel implements ActionListener {
     protected byte[] cardID;
     protected byte cardSoftVers;
     protected boolean authenticated = false;
+    protected boolean buyerAuthenticated = false;
     protected byte cardType;
     protected int petrolQuota;
     protected byte[] nonceC;
@@ -173,8 +177,11 @@ public abstract class PRFETerminal extends JPanel implements ActionListener {
         cardID = new byte[] {0,0,0,0};
         cardSoftVers = 0;
         authenticated = false;
+        buyerAuthenticated = false;
         cardType = 0;
         petrolQuota = 0;
+
+        pin = 0;
 
         nonceC = new byte[] {0,0,0,0, 0,0,0,0};
         nonceT = new byte[] {0,0,0,0, 0,0,0,0};
@@ -376,10 +383,7 @@ public abstract class PRFETerminal extends JPanel implements ActionListener {
         signature.update(new byte[] {termType, termSoftVers}, (short) 0, (short) 2);
         signature.sign(buffer, (short) 0, (short) 80, buffer, (short) 80);
 
-        /*
-         * For some reason AES does not want to encrypt 17 (or 19) blocks,
-         * so we add a block of 0's to the end... We do not know why :(
-         */
+        // AES block size is 128 bits so we pad using a block of 0's to the end.
         // encrypt message
         AESCipher.init(skey, Cipher.MODE_ENCRYPT);
         AESCipher.doFinal(buffer, (short) 0, (short) 144, buffer, (short) 0);
@@ -422,6 +426,104 @@ public abstract class PRFETerminal extends JPanel implements ActionListener {
 
         System.out.println("Authentication Successful");
         return "Authentication Successful";
+    }
+
+    public String authenticateBuyer(byte termType, byte termSoftVers) {
+        // get the right keypair based on type
+        KeyPair termKeys;
+        switch (termType & 0xff) {
+            case 0x01:
+                termKeys = TMan;
+                break;
+            case 0x02:
+                termKeys = TChar;
+                break;
+            case 0x03:
+                termKeys = TCons;
+                break;
+            default:
+                return "Error: terminal type unsupported for authentication";
+        }
+
+        // First verify the entered pin for validity:
+        if (pin > 999999 || pin < 0) {
+            System.out.printf("Invalid pin: %d\n", pin);
+            return "Invalid PIN";
+        }
+
+        byte[] buffer = new byte[16];
+        buffer[8] = (byte) (pin / 100000);
+        buffer[9] = (byte) ((pin / 10000) - (buffer[8] * 10));
+        buffer[10] = (byte) ((pin / 1000) - (buffer[9] * 10) - (buffer[8] * 100));
+        buffer[11] = (byte) ((pin / 100) - (buffer[10] * 10) - (buffer[9] * 100) - (buffer[8] * 1000));
+        buffer[12] = (byte) ((pin / 10) - (buffer[11] * 10) - (buffer[10] * 100) - (buffer[9] * 1000) - (buffer[8] * 10000));
+        buffer[13] = (byte) ((pin / 1) - (buffer[12] * 10) - (buffer[11] * 100) - (buffer[10] * 1000) - (buffer[9] * 10000) - (buffer[8] * 100000));
+
+        incNonce(nonceT);
+        Util.arrayCopy(nonceT, (short) 0, buffer, (short) 0, NONCE_LENGTH);
+
+        // padded with two 0's at the end
+        AESCipher.init(skey, Cipher.MODE_ENCRYPT);
+        AESCipher.doFinal(buffer, (short) 0, (short) 16, buffer, (short) 0);
+
+        // reset internal pin
+        pin = 0;
+
+        //construct a commandAPDU with the INS byte for read and the terminal info
+        CommandAPDU command = new CommandAPDU(PRFE_CLA, AUTH_BUY_INS, termType, termSoftVers, buffer, 0, 16, 80);
+
+        ResponseAPDU response;
+        try {
+            //card sends back apdu with the data after transmitting the commandAPDU to the card
+            response = applet.transmit(command);
+        } catch (CardException e) {
+            // TODO: do something with the exception
+            resetConnection();
+
+            System.out.println(e);
+            return "Transmit Error";
+        }
+
+        /*
+         * process the response apdu
+         *encrypted data:
+         *  1 byte tttt 000v (t = tries remaining; v = valid/invalid)
+         *  8 bytes nonceC
+         *  8 bytes nonceT
+         *  56 bytes card message signature
+         *  7 bytes 0 padding
+         */
+        byte[] data = response.getBytes();
+        if (data.length < 82) {
+            // Something failed, abort
+            System.out.printf("%x %x\n", data[0], data[1]);
+            resetConnection();
+            return "Auth error, please try again";
+        }
+
+        data = response.getData();
+        AESCipher.init(skey, Cipher.MODE_DECRYPT);
+
+        AESCipher.doFinal(data, (short) 0, (short) 80, data, (short) 0);
+        signature.init(Card.getPublic(), Signature.MODE_VERIFY);
+
+        incNonce(nonceC);
+        if (!signature.verify(data, (short) 0, (short) 17, data, (short) 17, (short) 56)
+                || !Arrays.equals(data, 1, 9, nonceC, 0, 8) || !Arrays.equals(data, 9, 17, nonceT, 0, 8)) {
+            resetConnection();
+
+            System.out.println("Card signature invalid");
+            return "Auth error, please try again";
+        }
+
+        buyerAuthenticated = (data[0] & 0x0f) == 1;
+        if (!buyerAuthenticated) {
+            int tries = data[0] >> 4;
+            System.out.printf("Wrong pin, %d tries remaining\n", tries);
+            return "Wrong Pin!";
+        }
+        System.out.println("Authenticated Buyer Successfully");
+        return "Authenticated Buyer Succesfully";
     }
 
     public String revoke(byte termType, byte termSoftVers) {
@@ -505,8 +607,8 @@ public abstract class PRFETerminal extends JPanel implements ActionListener {
         if ((data[0] & 0xff) == 0x90 && data[1] == 0) {
             System.out.println("Rekeyed Succesfully");
             return "Rekeyed Succesfully";
-        }
-        return "Rekey not accepted by card";
+        } 
+        return "Rekey not accepted by card"; 
     }
 
     public abstract Dimension getPreferredSize();
