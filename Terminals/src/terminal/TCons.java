@@ -200,8 +200,9 @@ public class TCons extends PRFETerminal {
 
    public String consumeQuota(){                                                        //use an amount of petrol quota on the card
         //send sequence number to card to start the consumption transaction
-        byte[] nonceT = generateNonce();
-        byte[] sigBuffer = new byte[2*SIGN_LENGTH];
+        byte[] sigBuffer = new byte[112];
+        String nonceString = Arrays.toString(nonceT);
+        System.out.println(nonceString);
 
         try {
             AESCipher.init(skey, Cipher.MODE_ENCRYPT);
@@ -212,6 +213,7 @@ public class TCons extends PRFETerminal {
         }
 
         CommandAPDU consumeCommand = new CommandAPDU(PRFE_CLA, CONS_INS, T_TYPE, T_SOFT_VERSION, sigBuffer);
+
 
         ResponseAPDU response = null;
         try {
@@ -224,20 +226,24 @@ public class TCons extends PRFETerminal {
         }
 
         //verify response
+        System.out.println(response.getNr()); //the card isnt sending any data in the response because this value returns 0
         byte[] data = response.getData();
+
         //data = card-id, quota, signedData
         byte[] cardID = new byte[4];
         Util.arrayCopy(data, (short) 0, cardID, (short) 0, (short) 4);
         short petrolQuotaOnCard = Util.getShort(data, (short) 4);
         incNonce(nonceT); //sequence nr + 1
-        byte[] nonceC = nonceT;
+        nonceC = nonceT;
+
 
         System.arraycopy(cardID, 0, sigBuffer, 0, 4);
         Util.setShort(sigBuffer, (short) 4, petrolQuotaOnCard);
         System.arraycopy(nonceC, 0, sigBuffer, 6, NONCET_LENGTH);
+        Util.setShort(sigBuffer, (short) 14, (short) 0); //make data 16 bytes, could also use tnum?
 
         AESCipher.init(skey, Cipher.MODE_DECRYPT);
-        AESCipher.doFinal(data, (short) 6, (short) SIGN_LENGTH, sigBuffer, (short) 14);
+        AESCipher.doFinal(data, (short) 6, (short) SIGN_LENGTH, sigBuffer, (short) 16);
         if ((Util.arrayCompare(sigBuffer, (short) 0, sigBuffer, (short) 14, (short) 14)) != (byte) 0) {
             return "Signature invalid";
         }
@@ -255,14 +261,16 @@ public class TCons extends PRFETerminal {
         incNonce(nonceC); //sequence nr + 2
         nonceT = nonceC;
 
-        byte[] dataBuffer = new byte[14];
+        byte[] dataBuffer = new byte[16];
         System.arraycopy(cardID, 0, dataBuffer, 0, 4);
         Util.setShort(dataBuffer, (short) 4, wantedPetrol);
         System.arraycopy(nonceT, 0, dataBuffer, 6, NONCET_LENGTH);
+        Util.setShort(dataBuffer, (short) 14, (short) 0);
+
 
 
         AESCipher.init(skey, Cipher.MODE_ENCRYPT);
-        AESCipher.doFinal(dataBuffer, (short) 0, (short) 14, sigBuffer, (short) 6);
+        AESCipher.doFinal(dataBuffer, (short) 0, (short) 16, sigBuffer, (short) 6);
 
         CommandAPDU cons2Command = new CommandAPDU((int) PRFE_CLA, (int) CONS_INS, (int) T_TYPE, (int) T_SOFT_VERSION, sigBuffer);
 
@@ -287,10 +295,11 @@ public class TCons extends PRFETerminal {
                 System.arraycopy(cardID, 0, dataBuffer, 0, 4);
                 Util.setShort(dataBuffer, (short) 4,  updatedQuota);
                 System.arraycopy(nonceT, 0, dataBuffer, 6, NONCET_LENGTH);
+                Util.setShort(dataBuffer, (short) 14, (short) 0);
 
 
                 AESCipher.init(skey, Cipher.MODE_ENCRYPT);
-                AESCipher.doFinal(dataBuffer, (short) 0, (short) 14, sigBuffer, (short) 6);
+                AESCipher.doFinal(dataBuffer, (short) 0, (short) 16, sigBuffer, (short) 6);
 
                 CommandAPDU cons3Command = new CommandAPDU((int) PRFE_CLA, (int) CONS_INS, (int) T_TYPE, (int)T_SOFT_VERSION, sigBuffer);
 
@@ -307,13 +316,6 @@ public class TCons extends PRFETerminal {
         return "Successful transaction";
     };
 
-    public byte[] generateNonce(){
-        SecureRandom random = new SecureRandom();
-        byte nonce[] = new byte[NONCET_LENGTH];
-        random.nextBytes(nonce);
-        return nonce;
-    };
-
 
     short getGasUsed(short amount, short remainingPetrolQuota){
         short temporaryQuota = remainingPetrolQuota;
@@ -324,6 +326,15 @@ public class TCons extends PRFETerminal {
         }
         return temporaryQuota;
     };
+
+    public byte[] generateNonce(){
+        //generate a 32 bit random nonce
+        SecureRandom random = new SecureRandom();
+        byte bytes[] = new byte[NONCET_LENGTH];
+        random.nextBytes(bytes);
+        return bytes;
+    };
+
 
     private void incNonce (byte[] nonce) {
         for (short i = (short) 7; i >= (short) 0; i--) {
