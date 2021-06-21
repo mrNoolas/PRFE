@@ -60,9 +60,8 @@ public class TCons extends PRFETerminal {
 
     int consumeAmount = 0;
 
-
     public TCons(JFrame parent, KeyPair TManKP, KeyPair TCharKP, KeyPair TConsKP,
-                KeyPair ServerKP, KeyPair CardKP, KeyPair ReCardKP) {
+                 KeyPair ServerKP, KeyPair CardKP, KeyPair ReCardKP) {
         super();
 
         TMan = TManKP;
@@ -168,10 +167,10 @@ public class TCons extends PRFETerminal {
                         break;
                     case "Authenticate": // authenticate
                         if(switchCallback.isRevokedCard(cardID)) {
-                          setText("Revoked card");
+                            setText("Revoked card");
                         } else {
-                          setText(authenticate(T_TYPE, T_SOFT_VERSION, T_ID));
-                          resetSession();
+                            setText(authenticate(T_TYPE, T_SOFT_VERSION, T_ID));
+                            resetSession();
                         }
                         break;
                     case "Quit":
@@ -196,7 +195,7 @@ public class TCons extends PRFETerminal {
                     case "Consume":
                         //consumeQuota();
                         setText(consumeQuota());
-                      //  resetSession();
+                        //  resetSession();
                         break;
                     case "Revoke":
                         setText(revoke(T_TYPE, T_SOFT_VERSION));
@@ -224,114 +223,109 @@ public class TCons extends PRFETerminal {
         }
     }
 
-   public String consumeQuota(){                                                        //use an amount of petrol quota on the card
+    public String consumeQuota(){                                                        //use an amount of petrol quota on the card
         //send sequence number to card to start the consumption transaction
-       byte[] sigBuffer = new byte[112];
 
-       System.arraycopy(nonceT, 0, sigBuffer, 0, 8);
-       System.arraycopy(nonceT, 0, sigBuffer, 8, 8);
-       AESCipher.init(skey, Cipher.MODE_ENCRYPT);
-       AESCipher.doFinal(sigBuffer, (short) 0, (short) 16, sigBuffer, (short) 0);
+        byte[] buffer = new byte[112];
 
-       CommandAPDU consumeCommand = new CommandAPDU((int) PRFE_CLA, (int) CONS_INS, (int)T_TYPE, (int)T_SOFT_VERSION, sigBuffer);
-       ResponseAPDU response;
-       try {
-           response = applet.transmit(consumeCommand);
-       } catch (CardException e) {
-           return "Transmission error";
-       }
+        // TODO: reenable this
+        //if (!authenticated || !buyerAuthenticated) {
+        //    System.out.println("Authentication required before charging");
+        //    return "Please authenticate first.";
+        //}
 
-        //verify response
-        System.out.println(response.getNr()); //the card isnt sending any data in the response because this value returns 0
+        incNonce(nonceT);
+        AESCipher.init(skey, Cipher.MODE_ENCRYPT);
+        AESCipher.update(nonceT, (short) 0, (short) 8, buffer, (short) 0);
+        AESCipher.doFinal(nonceC, (short) 0, (short) 8, buffer, (short) 0);
+
+        CommandAPDU consumeCommand = new CommandAPDU((int) PRFE_CLA, (int) CONS_INS, (int)T_TYPE, (int)T_SOFT_VERSION, buffer, 0, 16, 64);
+        ResponseAPDU response;
+        try {
+            response = applet.transmit(consumeCommand);
+        } catch (CardException e) {
+            return "Charging error";
+        }
+
         byte[] data = response.getData();
-        System.out.println(response.getNr()); //card successfully returns 64 bits of data now
+        System.arraycopy(data, 0, cardID, 0, 4);
 
-       System.arraycopy(data, 0, cardID, 0, 4);
-       System.out.println(Arrays.toString(cardID));
+        short petrolQuota = Util.getShort(data, (short) 4);
+        short tNum = Util.getShort(data, (short) 6);
 
-       short petrolQuotaOnCard = Util.getShort(data, (short) 4);
-       System.out.println(petrolQuotaOnCard);
+        // Here we would verify the data given by the card with the server.
 
-       short tNum = Util.getShort(data, (short) 6);
-       System.out.println(tNum);
+        signature.init(Card.getPublic(), Signature.MODE_VERIFY);
+        signature.update(data, (short) 0, (short) 8);
+        incNonce(nonceC);
 
-       signature.init(Card.getPublic(), Signature.MODE_VERIFY);
-       signature.update(data, (short) 0, (short) 8);
-       incNonce(nonceT);
-       System.out.println("hello"); // everything up to this point works for the consumption, only the signature does not verify so it will not run the rest.
+        if(!signature.verify(nonceC, (short) 0, (short) 8, data, (short) 8, (short) 56)) {
+            resetConnection();
+            System.out.println("Sig failed 1");
+            return "Charging failed, sig invalid";
+        }
 
-//       if(!signature.verify(nonceT, (short) 0, (short) 8, data, (short) 0, (short) 56)) {
-//          // resetConnection();
-//           return "Consumption failed, sig invalid";
-//       }
-
-       short amount = (short) consumeAmount;
-       System.out.println(amount);
-
+        short amount = (short) consumeAmount;
+        System.out.println(amount);
 
         if (amount > CONSUME_LIMIT){
+            System.out.println("Consumption over limit");
             return "Requested amount larger than maximum value";
-        }
-        else if (petrolQuotaOnCard - amount < 0){
+        } else if (petrolQuota < amount){
+            System.out.printf("Quota: %d; amount %d; This is insufficient. \n", petrolQuota, amount);
             return "Insufficient petrol credits left";
         }
-       short wantedPetrol = (short) (petrolQuotaOnCard - amount);
+        short targetAmount = (short) (petrolQuota - amount);
+        Util.setShort(data, (short) 4, targetAmount);
+        Util.setShort(data, (short) 6, tNum);
 
-       data[4] = (byte) (wantedPetrol & 0xff);
-       data[5] = (byte) ((wantedPetrol >> 8) & 0xff);
+        incNonce(nonceT);
+        signature.init(TCons.getPrivate(), Signature.MODE_SIGN);
+        signature.update(data, (short) 0, (short) 8);
+        signature.sign(nonceT, (short) 0, (short) 8, data, (short) 8);
 
-       data[6] = (byte) (tNum & 0xff);
-       data[7] = (byte) ((tNum >> 8) & 0xff);
-       incNonce(nonceT);
+        consumeCommand = new CommandAPDU((int) PRFE_CLA, (int) CONS_INS, (int) T_TYPE, (int)T_SOFT_VERSION, data);
+        try {
+            response = applet.transmit(consumeCommand);
+        } catch (CardException e) {
+            return "Charging error";
+        }
 
-       System.arraycopy(nonceT, 0, data, 8, 8);
-       signature.init(TCons.getPrivate(), Signature.MODE_SIGN);
-       signature.sign(data, (short) 0, (short) 16, data, (short) 8);
+        data = response.getData();
 
-       consumeCommand = new CommandAPDU((int) PRFE_CLA, (int) CONS_INS, (int) T_TYPE, (int)T_SOFT_VERSION, data);
-       try {
-           response = applet.transmit(consumeCommand);
-       } catch (CardException e) {
-           return "Charging error";
-       }
+        if(data[0] == (byte) 0) { // verified
+            // Now we have subtracted the desired maximum amount of quota before filling the tank.
+            // After dispensing the gas, calculate the difference between the actual usage and the earlier max-booking.
+            // So finalise by communicating the difference with the card.
+            short remainingPetrolQuota = getGasUsed(amount, petrolQuota);
+            if (remainingPetrolQuota < targetAmount) {
+                short updatedQuota = (short) (targetAmount - remainingPetrolQuota);
 
-       data = response.getData();
-       System.out.println(response.getNr());
-       incNonce(nonceT);
+                incNonce(nonceC);
+                System.arraycopy(cardID, 0, buffer, 0, 4);
+                Util.setShort(buffer, (short) 4, updatedQuota);
+                System.arraycopy(nonceC, 0, buffer, 6, NONCET_LENGTH);
+                Util.setShort(buffer, (short) 14, tNum);
 
-       if(data[0] == (byte) 0) {
-           short remainingPetrolQuota = getGasUsed(amount, petrolQuotaOnCard);
-           if (remainingPetrolQuota < wantedPetrol) {
+                AESCipher.init(skey, Cipher.MODE_ENCRYPT);
+                AESCipher.doFinal(buffer, (short) 0, (short) 16, buffer, (short) 6);
 
-               short updatedQuota = (short) (wantedPetrol - remainingPetrolQuota);
+                CommandAPDU cons3Command = new CommandAPDU((int) PRFE_CLA, (int) CONS_INS, (int) T_TYPE, (int) T_SOFT_VERSION, buffer);
 
-
-               System.arraycopy(cardID, 0, sigBuffer, 0, 4);
-               Util.setShort(sigBuffer, (short) 4, updatedQuota);
-               System.arraycopy(nonceT, 0, sigBuffer, 6, NONCET_LENGTH);
-               Util.setShort(sigBuffer, (short) 14, tNum);
-
-
-               AESCipher.init(skey, Cipher.MODE_ENCRYPT);
-               AESCipher.doFinal(sigBuffer, (short) 0, (short) 16, sigBuffer, (short) 6);
-
-               CommandAPDU cons3Command = new CommandAPDU((int) PRFE_CLA, (int) CONS_INS, (int) T_TYPE, (int) T_SOFT_VERSION, sigBuffer);
-
-               ResponseAPDU response3;
-               try {
-
-                   response3 = applet.transmit(cons3Command);
-               } catch (CardException e) {
-                   System.out.println(e);
-                   return "Transmit error";
-               }
-           }
-       }
+                ResponseAPDU response3;
+                try {
+                    response3 = applet.transmit(cons3Command);
+                } catch (CardException e) {
+                    System.out.println(e);
+                    return "Transmit error";
+                }
+            }
+        }
 
 /** some old code that im not sure can still be useful **/
 /*
 //        System.arraycopy(cardID, 0, sigBuffer, 0, 4);
-//        Util.setShort(sigBuffer, (short) 4, petrolQuotaOnCard);
+//        Util.setShort(sigBuffer, (short) 4, petrolQuota);
 //        System.arraycopy(nonceC, 0, sigBuffer, 6, NONCET_LENGTH);
 //        Util.setShort(sigBuffer, (short) 14, (short) 0); //make data 16 bytes, could also use tnum?
 //
@@ -346,17 +340,17 @@ public class TCons extends PRFETerminal {
 //        if (amount > CONSUME_LIMIT){
 //            return "Requested amount larger than maximum value";
 //        }
-//        else if (petrolQuotaOnCard - amount < 0){
+//        else if (petrolQuota - amount < 0){
 //            return "Insufficient petrol credits left";
 //        }
 //
-//        short wantedPetrol = (short) (petrolQuotaOnCard - amount);
+//        short targetAmount = (short) (petrolQuota - amount);
 //        incNonce(nonceC); //sequence nr + 2
 //        nonceT = nonceC;
 //
 //        byte[] dataBuffer = new byte[16];
 //        System.arraycopy(cardID, 0, dataBuffer, 0, 4);
-//        Util.setShort(dataBuffer, (short) 4, wantedPetrol);
+//        Util.setShort(dataBuffer, (short) 4, targetAmount);
 //        System.arraycopy(nonceT, 0, dataBuffer, 6, NONCET_LENGTH);
 //        Util.setShort(dataBuffer, (short) 14, (short) 0);
 //
@@ -380,10 +374,10 @@ public class TCons extends PRFETerminal {
 //        nonceT = nonceC;
 //        byte[] responseData = response2.getData();
 //        if(responseData[0] == (byte) 0){
-//            short remainingPetrolQuota = getGasUsed(amount, petrolQuotaOnCard);
-//            if(remainingPetrolQuota < wantedPetrol){
+//            short remainingPetrolQuota = getGasUsed(amount, petrolQuota);
+//            if(remainingPetrolQuota < targetAmount){
 //
-//                short updatedQuota = (short) (wantedPetrol - remainingPetrolQuota);
+//                short updatedQuota = (short) (targetAmount - remainingPetrolQuota);
 //
 //                System.arraycopy(cardID, 0, dataBuffer, 0, 4);
 //                Util.setShort(dataBuffer, (short) 4,  updatedQuota);
@@ -417,7 +411,7 @@ public class TCons extends PRFETerminal {
         for(int i = 0; i < amount; i++){
             System.out.print("Dispensing petrol....");
             temporaryQuota -= 1; //reduce the remaining quota by 1, one step at a time, this should eventually equal
-            // petrolQuotaOnCard - amount, if not then we deal with this in terminal
+            // petrolQuota - amount, if not then we deal with this in terminal
         }
         return temporaryQuota;
     };

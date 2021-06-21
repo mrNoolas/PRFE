@@ -192,7 +192,6 @@ public class TChar extends PRFETerminal {
     public String charge() {
         byte[] buffer = new byte[112];
 
-        // TODO: reenable
         if (!authenticated || !buyerAuthenticated) {
             System.out.println("Authentication required before charging");
             return "Please authenticate first.";
