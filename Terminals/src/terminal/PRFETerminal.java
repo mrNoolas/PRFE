@@ -426,7 +426,7 @@ public abstract class PRFETerminal extends JPanel implements ActionListener {
         return "Authentication Successful";
     }
 
-    public String authenticateBuyer(byte termType, byte termSoftVers, byte[] termID) {
+    public String authenticateBuyer(byte termType, byte termSoftVers) {
         // get the right keypair based on type
         KeyPair termKeys;
         switch (termType & 0xff) {
@@ -450,12 +450,12 @@ public abstract class PRFETerminal extends JPanel implements ActionListener {
         }
 
         byte[] buffer = new byte[16];
-        buffer[0] = (byte) (pin - (pin % 100000));
-        buffer[1] = (byte) ((pin % 100000) - (pin % 10000));
-        buffer[2] = (byte) ((pin % 10000) - (pin % 1000));
-        buffer[3] = (byte) ((pin % 1000) - (pin % 100));
-        buffer[4] = (byte) ((pin % 100) - (pin % 10));
-        buffer[5] = (byte) (pin % 10);
+        buffer[8] = (byte) (pin / 100000);
+        buffer[9] = (byte) ((pin / 10000) - (buffer[8] * 10));
+        buffer[10] = (byte) ((pin / 1000) - (buffer[9] * 10) - (buffer[8] * 100));
+        buffer[11] = (byte) ((pin / 100) - (buffer[10] * 10) - (buffer[9] * 100) - (buffer[8] * 1000));
+        buffer[12] = (byte) ((pin / 10) - (buffer[11] * 10) - (buffer[10] * 100) - (buffer[9] * 1000) - (buffer[8] * 10000));
+        buffer[13] = (byte) ((pin / 1) - (buffer[12] * 10) - (buffer[11] * 100) - (buffer[10] * 1000) - (buffer[9] * 10000) - (buffer[8] * 100000));
 
         incNonce(nonceT);
         Util.arrayCopy(nonceT, (short) 0, buffer, (short) 0, NONCE_LENGTH);
@@ -489,26 +489,29 @@ public abstract class PRFETerminal extends JPanel implements ActionListener {
          *  7 bytes 0 padding
          */
         byte[] data = response.getBytes();
-        if (data.length < 80) {
+        if (data.length < 82) {
             // Something failed, abort
+            System.out.printf("%x %x\n", data[0], data[1]);
             resetConnection();
             return "Auth error, please try again";
         }
 
         data = response.getData();
         AESCipher.init(skey, Cipher.MODE_DECRYPT);
-        AESCipher.doFinal(data, (short) 0, (short) 80, data, (short) 0);
 
+        AESCipher.doFinal(data, (short) 0, (short) 80, data, (short) 0);
         signature.init(Card.getPublic(), Signature.MODE_VERIFY);
+
         incNonce(nonceC);
-        if (!signature.verify(buffer, (short) 0, (short) 17, buffer, (short) 17, (short) 56)
-                || !Arrays.equals(data, 1, 8, nonceC, 0, 8) || !Arrays.equals(data, 9, 8, nonceT, 0, 8)) {
+        if (!signature.verify(data, (short) 0, (short) 17, data, (short) 17, (short) 56)
+                || !Arrays.equals(data, 1, 9, nonceC, 0, 8) || !Arrays.equals(data, 9, 17, nonceT, 0, 8)) {
             resetConnection();
+
             System.out.println("Card signature invalid");
             return "Auth error, please try again";
         }
 
-        buyerAuthenticated = data[0] == 1;
+        buyerAuthenticated = (data[0] & 0x0f) == 1;
         if (!buyerAuthenticated) {
             int tries = data[0] >> 4;
             System.out.printf("Wrong pin, %d tries remaining\n", tries);

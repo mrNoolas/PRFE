@@ -349,6 +349,7 @@ public class CardApplet extends Applet implements ISO7816 {
                 break;
             case 0x70:
                 // authenticate buyer
+                authenticateBuyer(apdu, buffer);
                 break;
             default:
                 select(); // reset
@@ -482,12 +483,20 @@ public class CardApplet extends Applet implements ISO7816 {
         }
 
         buffer = apdu.getBuffer();
+
+        AESCipher.init(skey, Cipher.MODE_DECRYPT);
+        AESCipher.doFinal(buffer, (short) 5, (short) 16, buffer, (short) 5);
+
+        for (short i = 13; i < (short) 19; i++) {
+            System.out.println(buffer[i]);
+        }
+
         incNonce(nonceT);
         if (Util.arrayCompare(nonceT, (short) 0, buffer, (short) 5, NONCE_LENGTH) == 0) {
-            if (pin.check(buffer, NONCE_LENGTH, PIN_SIZE)) {
+            if (pin.check(buffer, (short) 13, PIN_SIZE)) {
                 buyerAuthenticated[(short) 0] = true;
 
-                buffer[(short) 0] = (byte) ((byte) PIN_TRY_LIMIT << (short) 4) | (byte) 0x1;
+                buffer[(short) 0] = (byte) ((byte) PIN_TRY_LIMIT << (short) 4) | (byte) 0x01;
                 incNonce(nonceC);
                 Util.arrayCopyNonAtomic(nonceC, (short) 0, buffer, (short) 1, NONCE_LENGTH);
                 Util.arrayCopyNonAtomic(nonceT, (short) 0, buffer, (short) 9, NONCE_LENGTH);

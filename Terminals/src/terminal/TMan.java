@@ -51,7 +51,7 @@ import terminal.PRFETerminal;
 public class TMan extends PRFETerminal {
     private static final byte PERS_INS = (byte) 0x50;
 
-    static final Dimension PREFERRED_SIZE = new Dimension(900, 150);
+    static final Dimension PREFERRED_SIZE = new Dimension(900, 300);
     static final int DISPLAY_WIDTH = 60;
 
     public TMan(JFrame parent, KeyPair TManKP, KeyPair TCharKP, KeyPair TConsKP,
@@ -84,15 +84,32 @@ public class TMan extends PRFETerminal {
         display.setBackground(Color.darkGray);
         display.setForeground(Color.green);
         add(display, BorderLayout.NORTH);
-        keypad = new JPanel(new GridLayout(2, 4));
+        keypad = new JPanel(new GridLayout(5, 4));
         key("Read");
         key("Personalise");
-        key("Authenticate");
-        key("Quit");
-        key("Switch");
-        key("Revoke");
-        key("Rekey");
         key("Reset");
+        key("Quit");
+
+        key("7");
+        key("8");
+        key("9");
+        key("Switch");
+
+        key("4");
+        key("5");
+        key("6");
+        key("Revoke");
+
+        key("1");
+        key("2");
+        key("3");
+        key("Rekey");
+
+        key("Clear");
+        key("0");
+        key("Authenticate");
+        key("Auth Buyer");
+
         add(keypad, BorderLayout.CENTER);
     }
 
@@ -132,6 +149,24 @@ public class TMan extends PRFETerminal {
                     case "Rekey":
                         setText(rekey(T_TYPE, T_SOFT_VERSION, true, true, true, true));
                         break;
+                    case "0":
+                    case "1":
+                    case "2":
+                    case "3":
+                    case "4":
+                    case "5":
+                    case "6":
+                    case "7":
+                    case "8":
+                    case "9":
+                        keyPressed(Integer.parseInt(s));
+                        break;
+                    case "Clear":
+                        setText("0");
+                        pin = 0;
+                    case "Auth Buyer":
+                        setText(authenticateBuyer(T_TYPE, T_SOFT_VERSION));
+                        break;
                     default:
                         setText("nop"); //sendKey((byte) c));
                         resetConnection();
@@ -142,6 +177,16 @@ public class TMan extends PRFETerminal {
             System.out.println(e);
             System.out.println(MSG_ERROR);
         }
+    }
+
+    void keyPressed(int key) {
+        if (pin <= 99999) {
+            pin *= 10;
+            pin += key;
+        } else {
+            pin = 0;
+        }
+        setText(pin);
     }
 
     public String personalise () {
@@ -176,14 +221,13 @@ public class TMan extends PRFETerminal {
         int pinInt = random.nextInt(1000000);
         System.out.printf("PIN: %d\n", pinInt);
 
-        pin[0] = (byte) (pinInt - (pinInt % 100000));
-        pin[1] = (byte) ((pinInt % 100000) - (pinInt % 10000));
-        pin[2] = (byte) ((pinInt % 10000) - (pinInt % 1000));
-        pin[3] = (byte) ((pinInt % 1000) - (pinInt % 100));
-        pin[4] = (byte) ((pinInt % 100) - (pinInt % 10));
-        pin[5] = (byte) (pinInt % 10);
+        pin[0] = (byte) (pinInt / 100000);
+        pin[1] = (byte) ((pinInt / 10000) - (pin[0] * 10));
+        pin[2] = (byte) ((pinInt / 1000) - (pin[1] * 10) - (pin[0] * 100));
+        pin[3] = (byte) ((pinInt / 100) - (pin[2] * 10) - (pin[1] * 100) - (pin[0] * 1000));
+        pin[4] = (byte) ((pinInt / 10) - (pin[3] * 10) - (pin[2] * 100) - (pin[1] * 1000) - (pin[0] * 10000));
+        pin[5] = (byte) ((pinInt / 1) - (pin[4] * 10) - (pin[3] * 100) - (pin[2] * 1000) - (pin[1] * 10000) - (pin[0] * 100000));
         System.arraycopy(pin, 0, buffer1, 166, 6);
-
 
         ResponseAPDU response;
         CommandAPDU readCommand = new CommandAPDU(PRFE_CLA, PERS_INS, (byte) 1, T_SOFT_VERSION, buffer0, 0, 228, 228);
