@@ -254,33 +254,13 @@ public class TermSim {
             if (rekeyCard || rekeyTChar || rekeyTCons || rekeyTMan) {
                 keySetVersion++;
 
-                if (rekeyTMan) {
-                    TManKP.genKeyPair();
-                    tMan.TMan = TManKP;
-                    tCons.TMan = TManKP;
-                    tChar.TMan = TManKP;
-                }
-                if (rekeyTChar) {
-                    TCharKP.genKeyPair();
-                    tMan.TChar = TCharKP;
-                    tCons.TChar = TCharKP;
-                    tChar.TChar = TCharKP;
-                }
-                if (rekeyTCons) {
-                    TConsKP.genKeyPair();
-                    tMan.TCons = TConsKP;
-                    tCons.TCons = TConsKP;
-                    tChar.TCons = TConsKP;
-                }
-                //ServerKP.genKeyPair();
-                if (rekeyCard) {
-                    CardKP.genKeyPair();
-                    //ReCardKP.genKeyPair();
-
-                    tMan.Card = CardKP;
-                    tCons.Card = CardKP;
-                    tChar.Card = CardKP;
-                }
+                // genKeyPair automatically updates all terminals due to object references
+                if (rekeyTMan) TManKP.genKeyPair();
+                if (rekeyTChar) TCharKP.genKeyPair();
+                if (rekeyTCons) TConsKP.genKeyPair();
+                // ServerKP.genKeyPair();
+                if (rekeyCard) CardKP.genKeyPair();
+                // ReCardKP.genKeyPair();
 
                 signature.init(ReCardKP.getPrivate(), Signature.MODE_SIGN);
                 rekeySign[0] = (byte) (keySetVersion & 0xff);

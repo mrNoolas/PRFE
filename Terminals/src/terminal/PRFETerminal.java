@@ -297,6 +297,10 @@ public abstract class PRFETerminal extends JPanel implements ActionListener {
         if (data[0] == 0x62 && data[1] == 0) {
             System.out.println("Warning, terminal already authenticated");
             return "Warning, terminal already authenticated";
+        } else if (data.length < 161) {
+            // try rekeying and abort
+            rekey(T_TYPE, T_SOFT_VERSION, false, false, false, false);
+            return "Auth failed, attempted rekey";
         }
 
         data = response.getData();
