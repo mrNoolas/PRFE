@@ -92,7 +92,7 @@ public abstract class PRFETerminal extends JPanel implements ActionListener {
     protected byte[] CCert;            // Server certificate verification key
     protected byte[] CCertExp = {(byte) 0x07, (byte) 0xe6, (byte) 0x01, (byte) 0x01}; // yymd: 2022-01-01
 
-	protected byte[] TCert;
+	protected byte[] TCert = new byte[56];
 	protected byte[] TCertExp;
 
     protected KeyAgreement ECExch;
@@ -334,7 +334,7 @@ public abstract class PRFETerminal extends JPanel implements ActionListener {
         System.arraycopy(data, 33, cardID, 0, 4);
         System.arraycopy(data, 37, nonceC, 0, 8);
         authenticated = true;
-        
+
         // ================== Authentication Phase 2
         // Move forward with authenticating Terminal to card
         buffer = new byte[144];
@@ -360,7 +360,8 @@ public abstract class PRFETerminal extends JPanel implements ActionListener {
         signature.update(termID, (short) 0, (short) 4);
         signature.update(new byte[] {termType}, (short) 0, (short) 1); // Type termKeys
         signature.sign(TCertExp, (short) 0, (short) 4, TCert, (short) 0); // outputs 54, 55 or 56 bytes of signature data
-		System.arraycopy(TCert, 0, buffer, 20, 56);
+
+        System.arraycopy(TCert, 0, buffer, 20, 56);
         System.arraycopy(TCertExp, 0, buffer, 76, 4);
 
         // sign message
