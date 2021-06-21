@@ -899,21 +899,22 @@ public class CardApplet extends Applet implements ISO7816 {
     }
 
     private void consume(APDU apdu, byte[] buffer) {
-        // TODO: check authentication
-        switch (status[(short) 0] & 0xf0) {
-            case 0x00:
-                consumePhase1(apdu, buffer);
-                break;
-            case 0x10:
-                consumePhase2(apdu, buffer);
-                break;
-            case 0xc0:
-                consumePhase3(apdu, buffer);
-                break;
-            default:
-                select();
-                ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
-                break;
+        if ((short) (status[(short) 0] & 0x0f) == 0x03) { // only charge if the terminal is authenticated as TCons
+            switch (status[(short) 0] & 0xf0) {
+                case 0x00:
+                    consumePhase1(apdu, buffer);
+                    break;
+                case 0x10:
+                    consumePhase2(apdu, buffer);
+                    break;
+                case 0xc0:
+                    consumePhase3(apdu, buffer);
+                    break;
+                default:
+                    select();
+                    ISOException.throwIt(SW_SECURITY_STATUS_NOT_SATISFIED);
+                    break;
+            }
         }
     }
 
